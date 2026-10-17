@@ -3,6 +3,7 @@
 
 import base64;
 import time;
+import uuid;
 import from backend.config { openrouter_status }
 import from backend.graph { SubjectNode, LectureNode, ConceptNode, QuizNode, QuestionNode, depends_on }
 import from backend.ebbinghaus { calc_retrievability, classify_retention_status }
@@ -16,9 +17,9 @@ import from backend.agents.quiz_generator { generate_micro_quiz_items, Generated
 import from backend.agents.evaluator { evaluate_quiz_submission, StudentAnswerSubmission }
 import from backend.agents.scheduler { get_notifications }
 import from backend.agents.analytics { get_analytics }
-import from .components.MemoraDashboard { MemoraDashboard }
+cl import from .components.MemoraDashboard { MemoraDashboard }
 
-def:pub app() -> JsxElement {
+cl def:pub app() -> JsxElement {
     return <MemoraDashboard />;
 }
 
@@ -115,36 +116,43 @@ walker:pub get_quiz {
     has subject_name: str = "Computer Networks";
 
     can prepare_quiz with `Root entry {
-        now: float = time.time();
-        quiz_id: str = f"quiz_{int(now)}";
-
-        # Agent 3: Plan target concepts
-        concept_ids = [
-            "c_ip_addressing_and_subnetting",
-            "c_cidr_notation",
-            "c_subnet_masks_and_anding",
-            "c_default_gateway"
-        ];
-        concept_names = [
-            "IP Addressing & Subnetting",
-            "CIDR Notation",
-            "Subnet Masks & ANDing",
-            "Default Gateway"
-        ];
-
-        # Agent 4: Generate grounded micro-quiz questions
-        generated_questions = generate_micro_quiz_items(quiz_id, concept_ids, concept_names);
+        planner = root spawn plan_quiz(subject_name=self.subject_name);
+        if planner.status != "success" or len(planner.selected_concepts) == 0 {
+            report {"status": "error", "error": planner.error, "questions": []};
+            return;
+        }
+        quiz_id = f"quiz_{uuid.uuid4().hex}";
+        generated_questions = generate_micro_quiz_items(quiz_id, planner.selected_concepts);
+        if len(generated_questions) != len(planner.selected_concepts) {
+            report {"status": "error", "error": "Unable to generate a complete quiz.", "questions": []};
+            return;
+        }
+        subject = None;
+        for child in [root-->] {
+            if isinstance(child, SubjectNode) and child.id == planner.subject_id {
+                subject = child;
+                break;
+            }
+        }
+        if subject is None {
+            report {"status": "error", "error": "Subject not found.", "questions": []};
+            return;
+        }
+        quiz = QuizNode(id=quiz_id, subject_id=subject.id, created_at=time.time());
+        subject ++> quiz;
 
         q_list: list[dict] = [];
         for q in generated_questions {
+            question = QuestionNode(id=q.id, quiz_id=quiz_id, concept_id=q.concept_id,
+                concept_name=q.concept_name, prompt=q.prompt, options=q.options,
+                correct_answer=q.correct_answer, explanation=q.explanation);
+            quiz ++> question;
             q_list.append({
                 "id": q.id,
                 "concept_id": q.concept_id,
                 "concept_name": q.concept_name,
                 "prompt": q.prompt,
                 "options": q.options,
-                "correct_answer": q.correct_answer,
-                "explanation": q.explanation,
                 "time_limit_seconds": q.time_limit_seconds
             });
         }
@@ -155,6 +163,7 @@ walker:pub get_quiz {
             "subject": self.subject_name,
             "duration_minutes": 3,
             "total_questions": len(q_list),
+            "plan": planner.selected_concepts,
             "questions": q_list
         };
     }
@@ -166,23 +175,31 @@ walker:pub get_quiz {
 walker:pub submit_quiz {
     has quiz_id: str;
     has submissions: list[dict] = [];
+    has duration_seconds: int = 0;
 
     can evaluate with `Root entry {
+        if not self.quiz_id.strip() or len(self.submissions) == 0 {
+            report {"status": "error", "error": "quiz_id and submissions are required."};
+            return;
+        }
         typed_subs: list[StudentAnswerSubmission] = [];
         for item in self.submissions {
+            if not isinstance(item, dict) or not isinstance(item.get("question_id"), str) or not isinstance(item.get("submitted_answer"), str) or not item.get("question_id", "").strip() {
+                report {"status": "error", "error": "Each submission needs a question_id and a text answer."};
+                return;
+            }
             typed_subs.append(StudentAnswerSubmission(
-                question_id=item.get("question_id", ""),
-                concept_id=item.get("concept_id", ""),
-                submitted_answer=item.get("submitted_answer", ""),
-                correct_answer=item.get("correct_answer", ""),
-                explanation=item.get("explanation", "")
+                question_id=str(item["question_id"]),
+                submitted_answer=str(item["submitted_answer"])
             ));
         }
 
         eval_walker = root spawn evaluate_quiz_submission(
             quiz_id=self.quiz_id,
-            submissions=typed_subs
+            submissions=typed_subs,
+            duration_seconds=self.duration_seconds
         );
+        report eval_walker.result;
     }
 }
 

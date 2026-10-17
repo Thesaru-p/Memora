@@ -1,75 +1,70 @@
-# Scheduler & Notification Agent (Dev 3 Domain)
-# Uses liquid/lfm-2.5-2.6b:free (273ms latency, 216 t/s) via OpenRouter
-# Generates personalized Day-1 spaced repetition alerts tailored to the student's decaying topics.
-
+"""Read review alerts from persisted concept due times."""
 import time;
 import json;
-import from backend.graph { SubjectNode, ConceptNode }
+import from backend.graph { SubjectNode, LectureNode, ConceptNode }
+import from backend.ebbinghaus { calc_retrievability, classify_retention_status }
 import from backend.config { query_openrouter, MODEL_FAST }
 
-# Generates personalized Day-1 review notification copy using the fast LiquidAI model.
-def generate_personalized_notification(subject: str, topic: str, streak: int) -> dict {
-    sys_prompt = "You are a motivating, warm study coach. Generate a 1-sentence urgent yet friendly push notification for a student reminding them of the 24-hour Ebbinghaus forgetting curve. Return ONLY JSON: {\"title\": str, \"message\": str}.";
-    user_prompt = f"Subject: {subject}\nFading Topic: {topic}\nStudy Streak: {streak} days";
-
-    raw_response = query_openrouter(MODEL_FAST, sys_prompt, user_prompt);
-    if raw_response {
+def notification_copy(subject: str, topic: str) -> dict {
+    fallback = {"title": "Time to review", "message": f"{topic} in {subject} is ready for a 3-minute review."};
+    raw = query_openrouter(MODEL_FAST,
+        "Write a brief, truthful study reminder. Return only JSON with title and message.",
+        f"Subject: {subject}\nDue concept: {topic}");
+    if raw {
         try {
-            parsed = json.loads(raw_response);
-            if isinstance(parsed, dict) and "title" in parsed {
-                return {
-                    "title": str(parsed.get("title", "Protect Your Memory Curve!")),
-                    "message": str(parsed.get("message", f"It's been ~24 hours since your {topic} lecture. Take a quick 3-min quiz to stop the 50% forgetting cliff!"))
-                };
+            parsed = json.loads(raw);
+            if isinstance(parsed, dict) and isinstance(parsed.get("title"), str) and isinstance(parsed.get("message"), str) and parsed["title"].strip() and parsed["message"].strip() {
+                return {"title": parsed["title"], "message": parsed["message"]};
             }
-        } except Exception as e {
-            print(f"[Scheduler Fallback] {e}");
+        } except Exception {
+            raw = "";
         }
     }
-
-    return {
-        "title": "Protect Your Memory Curve!",
-        "message": f"It has been ~24 hours since your {topic} lecture. Take a quick 3-min quiz to stop the 50% forgetting cliff!"
-    };
+    return fallback;
 }
 
-walker get_notifications {
+walker:pub get_notifications {
     has subject_name: str = "Computer Networks";
     has alerts: list[dict] = [];
 
-    can check_schedule with `root entry {
-        now: float = time.time();
-
-        # Synthesize personalized notification with fast model
-        notif_content = generate_personalized_notification(
-            subject=self.subject_name,
-            topic="Subnet Masks & ANDing",
-            streak=3
-        );
-
-        self.alerts.append({
-            "id": f"notif_day1_{int(now)}",
-            "type": "DAY_1_EBBINGHAUS_ALERT",
-            "title": notif_content["title"],
-            "message": notif_content["message"],
-            "urgency": "HIGH",
-            "estimated_minutes": 3,
-            "due_time": now
-        });
-
-        self.alerts.append({
-            "id": f"notif_streak_{int(now)}",
-            "type": "STREAK_ACTIVE",
-            "title": "Study Streak: 3 Days!",
-            "message": "Great consistency! Micro-reviews save ~4 hours of last-minute cramming per exam.",
-            "urgency": "INFO",
-            "due_time": now
-        });
-
-        report {
-            "status": "success",
-            "notifications": self.alerts,
-            "total_pending": len(self.alerts)
-        };
+    can check_schedule with Root entry {
+        subject = None;
+        for child in [root-->] {
+            if isinstance(child, SubjectNode) and child.name.strip().lower() == self.subject_name.strip().lower() {
+                subject = child;
+                break;
+            }
+        }
+        if subject is None {
+            report {"status": "error", "error": "Subject not found.", "notifications": [], "total_pending": 0};
+            return;
+        }
+        now = time.time();
+        due: list[dict] = [];
+        for lecture in [subject-->] {
+            if isinstance(lecture, LectureNode) {
+                for concept in [lecture-->] {
+                    if isinstance(concept, ConceptNode) and concept.subject_id == subject.id {
+                        concept.retrievability = calc_retrievability(concept.stability, (now - concept.last_reviewed) / 86400.0);
+                        concept.status = "NEW" if concept.review_count == 0 else classify_retention_status(concept.retrievability);
+                        if (concept.next_review_due > 0.0 and concept.next_review_due <= now) or concept.retrievability < 0.6 {
+                            due.append({"id": concept.id, "name": concept.name, "due_time": concept.next_review_due,
+                                "retention": concept.retrievability});
+                        }
+                    }
+                }
+            }
+        }
+        for item in due {
+            copy = notification_copy(subject.name, str(item["name"]));
+            self.alerts.append({
+                "id": f"review_{subject.id}_{item['id']}_{int(item['due_time'])}",
+                "type": "REVIEW_DUE", "subject": subject.name,
+                "concept_ids": [item["id"]], "title": copy["title"], "message": copy["message"],
+                "urgency": "HIGH" if item["retention"] < 0.6 else "WARN",
+                "estimated_minutes": 3, "due_time": item["due_time"]
+            });
+        }
+        report {"status": "success", "notifications": self.alerts, "total_pending": len(self.alerts)};
     }
 }

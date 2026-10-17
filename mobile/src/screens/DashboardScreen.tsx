@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { api } from '../api/client';
-import { DashboardData } from '../types';
+import { AppNotification, DashboardData } from '../types';
 
 interface Props {
   onStartQuiz: () => void;
@@ -18,6 +18,21 @@ export const DashboardScreen: React.FC<Props> = ({
 }) => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
+  const [alerts, setAlerts] = useState<AppNotification[] | null>(null);
+  const [alertError, setAlertError] = useState('');
+  const [alertsLoading, setAlertsLoading] = useState(false);
+
+  const checkAlerts = async () => {
+    setAlertsLoading(true);
+    setAlertError('');
+    try {
+      setAlerts(await api.getNotifications('Computer Networks'));
+    } catch (e) {
+      setAlertError(e instanceof Error ? e.message : 'Could not check reminders');
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -76,19 +91,36 @@ export const DashboardScreen: React.FC<Props> = ({
         </Text>
       </View>
 
-      {/* Action: Day-1 Micro Quiz Banner */}
+      {/* Manual review test */}
       <View style={styles.quizAlertCard}>
         <View style={styles.alertHeader}>
-          <Text style={styles.badgeUrgent}>24H REVIEW DUE</Text>
+          <Text style={styles.badgeUrgent}>READY TO REVIEW</Text>
           <Text style={styles.quizDuration}>⚡ 3-4 mins</Text>
         </View>
-        <Text style={styles.quizPromptTitle}>Refresh: {data?.next_quiz_topic || 'Subnet Masks & ANDing'}</Text>
+        <Text style={styles.quizPromptTitle}>Create a review quiz</Text>
         <Text style={styles.quizPromptDesc}>
-          Take a 4-question micro-quiz now to stop the 50% Day-1 memory decay.
+          The planner will select concepts from your saved lectures.
         </Text>
         <TouchableOpacity style={styles.quizStartBtn} onPress={onStartQuiz}>
           <Text style={styles.quizStartBtnText}>Start 3-Min Micro-Quiz</Text>
         </TouchableOpacity>
+      </View>
+
+      <View style={styles.quizAlertCard}>
+        <Text style={styles.quizPromptTitle}>Review reminders</Text>
+        <Text style={styles.quizPromptDesc}>Check the scheduler against your saved concepts.</Text>
+        <TouchableOpacity style={styles.quizStartBtn} onPress={checkAlerts} disabled={alertsLoading}>
+          <Text style={styles.quizStartBtnText}>{alertsLoading ? 'Checking…' : 'Check Review Alerts'}</Text>
+        </TouchableOpacity>
+        {!!alertError && <Text style={styles.alertMessage}>{alertError}</Text>}
+        {alerts !== null && alerts.length === 0 && <Text style={styles.alertMessage}>No reviews due right now.</Text>}
+        {alerts?.map((alert) => (
+          <View key={alert.id} style={styles.alertItem}>
+            <Text style={styles.quizPromptTitle}>{alert.title} · {alert.urgency}</Text>
+            <Text style={styles.quizPromptDesc}>{alert.message}</Text>
+            <TouchableOpacity onPress={onStartQuiz}><Text style={styles.alertAction}>Start Review →</Text></TouchableOpacity>
+          </View>
+        ))}
       </View>
 
       {/* Quick Navigation Tiles */}
@@ -147,4 +179,7 @@ const styles = StyleSheet.create({
   tileIcon: { fontSize: 26, marginBottom: 8 },
   tileTitle: { fontSize: 15, fontWeight: '700', color: '#FFFFFF' },
   tileDesc: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
+  alertItem: { borderTopWidth: 1, borderTopColor: '#4F46E5', paddingTop: 12, marginTop: 12 },
+  alertMessage: { color: '#FDA4AF', marginTop: 10 },
+  alertAction: { color: '#A5B4FC', fontWeight: '700', paddingVertical: 8 },
 });

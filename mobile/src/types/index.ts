@@ -33,25 +33,32 @@ export interface QuizQuestion {
   concept_name: string;
   prompt: string;
   options: string[];
-  correct_answer: string;
-  explanation: string;
   time_limit_seconds: number;
 }
 
+export interface PlannedConcept {
+  concept_id: string;
+  concept_name: string;
+  summary: string;
+  retrievability: number;
+  status: RetentionStatus;
+  selection_reason: string;
+}
+
 export interface QuizPayload {
+  status: string;
+  error?: string;
   quiz_id: string;
   subject: string;
   duration_minutes: number;
   total_questions: number;
+  plan: PlannedConcept[];
   questions: QuizQuestion[];
 }
 
 export interface StudentSubmissionItem {
   question_id: string;
-  concept_id: string;
   submitted_answer: string;
-  correct_answer: string;
-  explanation: string;
 }
 
 export interface MissedExplanation {
@@ -72,6 +79,8 @@ export interface RecalibratedConcept {
 }
 
 export interface QuizEvaluationResult {
+  status: string;
+  error?: string;
   quiz_id: string;
   total_items: number;
   correct_items: number;
@@ -132,6 +141,8 @@ export interface KnowledgeGraphData {
 export interface AppNotification {
   id: string;
   type: string;
+  subject?: string;
+  concept_ids?: string[];
   title: string;
   message: string;
   urgency: 'HIGH' | 'INFO' | 'WARN';
