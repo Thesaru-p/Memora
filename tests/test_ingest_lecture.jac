@@ -28,6 +28,8 @@ test "ingest_lecture in append mode accumulates concepts across uploads" {
         assert data1["status"] == "success";
         assert data1["mode"] == "append";
         assert data1["total_lecture_concepts"] == 2;
+        subject = [s for s in [root-->] if isinstance(s, SubjectNode) and s.id == "subj_cellular_bio"][0];
+        assert subject.code == "CB-001";
 
         # Upload 2 (append mode)
         res2 = root spawn ingest_lecture(
@@ -59,7 +61,7 @@ test "ingest_lecture in replace mode resets lecture concepts fresh" {
         root spawn ingest_lecture(
             subject_name="Chemistry",
             lecture_title="Thermodynamics",
-            notes_text="",
+            notes_text="Old chemistry notes",
             replace_existing=False
         );
 
@@ -67,7 +69,7 @@ test "ingest_lecture in replace mode resets lecture concepts fresh" {
         res_replace = root spawn ingest_lecture(
             subject_name="Chemistry",
             lecture_title="Thermodynamics",
-            notes_text="",
+            notes_text="Fresh chemistry notes",
             replace_existing=True
         );
         data = res_replace.result;
@@ -100,7 +102,7 @@ test "ingest_lecture with images_b64 batch processes multiple slides in one call
         res = root spawn ingest_lecture(
             subject_name="Physics",
             lecture_title="Kinematics",
-            images_b64=["data:image/png;base64,slide1", "data:image/png;base64,slide2"],
+            images_b64=["data:image/png;base64,c2xpZGUx", "data:image/png;base64,c2xpZGUy"],
             replace_existing=False
         );
         data = res.result;
@@ -109,4 +111,30 @@ test "ingest_lecture with images_b64 batch processes multiple slides in one call
         assert data["total_lecture_concepts"] == 4;
         assert len(data["concepts_extracted"]) == 4;
     }
+}
+
+test "ingest_lecture rejects the whole image batch when one slide fails" {
+    valid = [
+        RawExtractedConcept(name="Valid A", summary="A", formula_or_rule="", difficulty=3.0, prerequisites=[]),
+        RawExtractedConcept(name="Valid B", summary="B", formula_or_rule="", difficulty=4.0, prerequisites=[]),
+        RawExtractedConcept(name="Valid C", summary="C", formula_or_rule="", difficulty=5.0, prerequisites=[]),
+        RawExtractedConcept(name="Valid D", summary="D", formula_or_rule="", difficulty=6.0, prerequisites=[])
+    ];
+
+    with patch("main.extract_concepts_from_text", side_effect=[valid, []]) {
+        res = root spawn ingest_lecture(
+            subject_name="Atomic Batch",
+            lecture_title="Two Slides",
+            images_b64=["data:image/png;base64,c2xpZGUx", "data:image/png;base64,c2xpZGUy"]
+        );
+        assert res.result["status"] == "error";
+        subjects = [s for s in [root-->] if isinstance(s, SubjectNode) and s.id == "subj_atomic_batch"];
+        assert len(subjects) == 0;
+    }
+}
+
+test "ingest_lecture validates required content before extraction" {
+    res = root spawn ingest_lecture(subject_name="", lecture_title="", notes_text="");
+    assert res.result["status"] == "error";
+    assert res.result["total_concepts"] == 0;
 }

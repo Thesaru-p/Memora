@@ -10,6 +10,7 @@ walker build_lecture_graph {
     has lecture_title: str;
     has raw_notes: str;
     has concepts: list[RawExtractedConcept];
+    has subject_code: str = "";
     has replace_existing: bool = False;
     has created_nodes_count: int = 0;
     has total_lecture_concepts: int = 0;
@@ -20,12 +21,20 @@ walker build_lecture_graph {
         clean_subject: str = self.subject_name.strip();
         clean_title: str = self.lecture_title.strip();
         subject_id: str = f"subj_{clean_subject.lower().replace(' ', '_')}";
+        generated_code: str = "";
+        for word in clean_subject.split() {
+            generated_code = f"{generated_code}{word[0].upper()}";
+        }
+        if not generated_code {
+            generated_code = "SUBJ";
+        }
+        clean_code: str = self.subject_code.strip() if self.subject_code.strip() else f"{generated_code}-001";
 
         # 1. Find and reuse existing Subject Node by subject_id, or create if not present
         subject = SubjectNode(
             id=subject_id,
             name=clean_subject,
-            code="CS-301",
+            code=clean_code,
             description=f"Course module for {clean_subject}",
             created_at=now
         );

@@ -4,7 +4,7 @@ import time;
 import from backend.graph { SubjectNode, LectureNode, ConceptNode }
 import from backend.agents.graph_builder { build_lecture_graph }
 import from backend.agents.lecture_analyzer { RawExtractedConcept }
-import from backend.agents.graph_retriever { get_graph_data, get_dashboard }
+import from main { get_graph_data, get_dashboard }
 
 test "get_graph_data traverses real spatial nodes and prerequisite edges" {
     concepts = [
@@ -73,9 +73,10 @@ test "get_dashboard computes dynamic retention and active concept count" {
     assert dash["next_quiz_topic"] != "";
 }
 
-test "seeded demo fallback for Computer Networks when graph empty" {
-    res = root spawn get_graph_data(subject_name="Computer Networks");
+test "missing subject never returns another subject or demo nodes" {
+    res = root spawn get_graph_data(subject_name="Missing Subject");
     data = res.result;
-    assert data["status"] == "success";
-    assert len(data["nodes"]) >= 4;
+    assert data["status"] == "no_lecture_context";
+    assert data["subject"] == "Missing Subject";
+    assert len(data["nodes"]) == 0;
 }

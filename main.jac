@@ -30,6 +30,7 @@ walker:pub get_openrouter_status {
 # -------------------------------------------------------------
 walker:pub ingest_lecture {
     has subject_name: str = "Computer Networks";
+    has subject_code: str = "";
     has lecture_title: str = "IP Subnetting & CIDR";
     has notes_text: str = "";
     has image_b64: str = "";
@@ -38,6 +39,19 @@ walker:pub ingest_lecture {
     has result: dict = {};
 
     can process with `Root entry {
+        clean_subject: str = self.subject_name.strip();
+        clean_title: str = self.lecture_title.strip();
+        if not clean_subject or not clean_title or len(clean_subject) > 200 or len(clean_title) > 300 {
+            self.result = {"status": "error", "error": "subject_name and lecture_title are required and must be at most 200 and 300 characters.", "concepts_extracted": [], "total_concepts": 0};
+            report self.result;
+            return;
+        }
+        if len(self.notes_text) > 100000 {
+            self.result = {"status": "error", "error": "notes_text exceeds the 100,000 character limit.", "concepts_extracted": [], "total_concepts": 0};
+            report self.result;
+            return;
+        }
+
         all_images: list[str] = [];
         if self.images_b64 and len(self.images_b64) > 0 {
             for img in self.images_b64 {
@@ -48,14 +62,46 @@ walker:pub ingest_lecture {
         } elif self.image_b64 {
             all_images.append(self.image_b64);
         }
+        if len(all_images) > 10 {
+            self.result = {"status": "error", "error": "A maximum of 10 lecture images can be ingested at once.", "concepts_extracted": [], "total_concepts": 0};
+            report self.result;
+            return;
+        }
+        for img in all_images {
+            valid_type: bool = img.startswith("data:image/jpeg;base64,") or img.startswith("data:image/png;base64,") or img.startswith("data:image/webp;base64,");
+            valid_image: bool = valid_type and len(img) <= 7000000;
+            if valid_image {
+                try {
+                    decoded_image = base64.b64decode(img.split(",", 1)[1], validate=True);
+                    valid_image = len(decoded_image) > 0 and len(decoded_image) <= 5242880;
+                } except Exception {
+                    valid_image = False;
+                }
+            }
+            if not valid_image {
+                self.result = {"status": "error", "error": "Each image must be a JPG, PNG, or WebP data URL no larger than 5 MB.", "concepts_extracted": [], "total_concepts": 0};
+                report self.result;
+                return;
+            }
+        }
+        if len(all_images) == 0 and not self.notes_text.strip() {
+            self.result = {"status": "error", "error": "Provide notes_text or at least one lecture image.", "concepts_extracted": [], "total_concepts": 0};
+            report self.result;
+            return;
+        }
 
         # Agent 1: Analyze lecture notes (text or image) and extract atomic concepts
         extracted_all: list[RawExtractedConcept] = [];
+        failed_slide: int = 0;
         if len(all_images) > 0 {
             img_idx = 0;
             for img in all_images {
                 slide_notes = self.notes_text if img_idx == 0 else "";
                 extracted = extract_concepts_from_text(self.lecture_title, slide_notes, img);
+                if len(extracted) == 0 {
+                    failed_slide = img_idx + 1;
+                    break;
+                }
                 for c in extracted {
                     # deduplicate by name within the batch
                     exists_in_batch = False;
@@ -75,21 +121,23 @@ walker:pub ingest_lecture {
             extracted_all = extract_concepts_from_text(self.lecture_title, self.notes_text, "");
         }
 
-        if len(extracted_all) == 0 {
-            report {
+        if failed_slide > 0 or len(extracted_all) == 0 {
+            self.result = {
                 "status": "error",
-                "error": "AI concept extraction failed. No graph nodes were created. Check the OpenRouter status and server output, then retry.",
+                "error": f"AI concept extraction failed for slide {failed_slide}. No graph nodes were created." if failed_slide > 0 else "AI concept extraction failed. No graph nodes were created. Check the OpenRouter status and server output, then retry.",
                 "subject": self.subject_name,
                 "lecture_title": self.lecture_title,
                 "concepts_extracted": [],
                 "total_concepts": 0
             };
+            report self.result;
             return;
         }
 
         # Agent 2: Build and stitch knowledge graph from root
         builder = root spawn build_lecture_graph(
             subject_name=self.subject_name,
+            subject_code=self.subject_code,
             lecture_title=self.lecture_title,
             raw_notes=self.notes_text,
             concepts=extracted_all,
@@ -131,13 +179,16 @@ walker:pub ingest_lecture {
 # -------------------------------------------------------------
 walker:pub get_dashboard {
     has subject_name: str = "Computer Networks";
+    has result: dict = {};
 
     can fetch with `Root entry {
         now: float = time.time();
         clean_subject: str = self.subject_name.strip();
         target_subject_id: str = f"subj_{clean_subject.lower().replace(' ', '_')}";
 
-        subject = None;
+        subject: SubjectNode | None = None;
+        resolved_subject_name: str = clean_subject;
+        resolved_subject_code: str = "";
         for child in [root-->] {
             if isinstance(child, SubjectNode) {
                 if child.id == target_subject_id or child.name.strip().lower() == clean_subject.lower() {
@@ -146,17 +197,10 @@ walker:pub get_dashboard {
                 }
             }
         }
-        if not subject {
-            for child in [root-->] {
-                if isinstance(child, SubjectNode) {
-                    subject = child;
-                    break;
-                }
-            }
-        }
-
         concepts: list[ConceptNode] = [];
         if subject {
+            resolved_subject_name = subject.name;
+            resolved_subject_code = subject.code;
             for lec in [subject-->] {
                 if isinstance(lec, LectureNode) {
                     for c in [lec-->] {
@@ -196,10 +240,10 @@ walker:pub get_dashboard {
                 due_in_hours = 1;
             }
 
-            report {
+            self.result = {
                 "status": "success",
-                "subject_name": subject.name,
-                "code": subject.code if subject.code else "CS-301",
+                "subject_name": resolved_subject_name,
+                "code": resolved_subject_code,
                 "overall_retention_pct": overall_retention,
                 "active_concepts_count": len(concepts),
                 "study_streak_days": 3,
@@ -207,18 +251,20 @@ walker:pub get_dashboard {
                 "next_quiz_topic": lowest_retention_concept.name,
                 "pending_quiz_available": True
             };
+            report self.result;
         } else {
-            report {
-                "status": "success",
-                "subject_name": self.subject_name,
-                "code": "CS-301",
-                "overall_retention_pct": 82.5,
-                "active_concepts_count": 4,
-                "study_streak_days": 3,
-                "next_quiz_due_in_hours": 18,
-                "next_quiz_topic": "Subnet Masks & ANDing",
-                "pending_quiz_available": True
+            self.result = {
+                "status": "no_lecture_context",
+                "subject_name": resolved_subject_name,
+                "code": resolved_subject_code,
+                "overall_retention_pct": 0.0,
+                "active_concepts_count": 0,
+                "study_streak_days": 0,
+                "next_quiz_due_in_hours": 0,
+                "next_quiz_topic": "",
+                "pending_quiz_available": False
             };
+            report self.result;
         }
     }
 }
@@ -286,11 +332,11 @@ walker:pub submit_quiz {
         typed_subs: list[StudentAnswerSubmission] = [];
         for item in self.submissions {
             typed_subs.append(StudentAnswerSubmission(
-                question_id=item.get("question_id", ""),
-                concept_id=item.get("concept_id", ""),
-                submitted_answer=item.get("submitted_answer", ""),
-                correct_answer=item.get("correct_answer", ""),
-                explanation=item.get("explanation", "")
+                question_id=str(item.get("question_id", "")),
+                concept_id=str(item.get("concept_id", "")),
+                submitted_answer=str(item.get("submitted_answer", "")),
+                correct_answer=str(item.get("correct_answer", "")),
+                explanation=str(item.get("explanation", ""))
             ));
         }
 
@@ -306,13 +352,16 @@ walker:pub submit_quiz {
 # -------------------------------------------------------------
 walker:pub get_graph_data {
     has subject_name: str = "Computer Networks";
+    has result: dict = {};
 
     can gather with `Root entry {
         now: float = time.time();
         clean_subject: str = self.subject_name.strip();
         target_subject_id: str = f"subj_{clean_subject.lower().replace(' ', '_')}";
 
-        subject = None;
+        subject: SubjectNode | None = None;
+        resolved_subject_name: str = clean_subject;
+        resolved_subject_id: str = target_subject_id;
         for child in [root-->] {
             if isinstance(child, SubjectNode) {
                 if child.id == target_subject_id or child.name.strip().lower() == clean_subject.lower() {
@@ -321,20 +370,13 @@ walker:pub get_graph_data {
                 }
             }
         }
-        if not subject {
-            for child in [root-->] {
-                if isinstance(child, SubjectNode) {
-                    subject = child;
-                    break;
-                }
-            }
-        }
-
         nodes: list[dict] = [];
         edges: list[dict] = [];
         collected_concepts: list[ConceptNode] = [];
 
         if subject {
+            resolved_subject_name = subject.name;
+            resolved_subject_id = subject.id;
             for lec in [subject-->] {
                 if isinstance(lec, LectureNode) {
                     for c in [lec-->] {
@@ -373,60 +415,17 @@ walker:pub get_graph_data {
             }
         }
 
-        # Fallback to seeded demo data only if no nodes exist in graph and default subject was requested
-        if len(nodes) == 0 and clean_subject.lower() == "computer networks" {
-            nodes = [
-                {
-                    "id": "c_ip_addressing_and_subnetting",
-                    "label": "IP Addressing & Subnetting",
-                    "status": "STRONG",
-                    "retention_pct": 92.0,
-                    "mastery_score": 0.85,
-                    "summary": "Hierarchical addressing scheme using network prefix and host bits."
-                },
-                {
-                    "id": "c_cidr_notation",
-                    "label": "CIDR Notation",
-                    "status": "STRONG",
-                    "retention_pct": 88.0,
-                    "mastery_score": 0.80,
-                    "summary": "Slash prefix representation replacing legacy IP classes."
-                },
-                {
-                    "id": "c_subnet_masks_and_anding",
-                    "label": "Subnet Masks & ANDing",
-                    "status": "FADING",
-                    "retention_pct": 64.0,
-                    "mastery_score": 0.60,
-                    "summary": "Bitwise AND operation to isolate the network address."
-                },
-                {
-                    "id": "c_default_gateway",
-                    "label": "Default Gateway",
-                    "status": "CRITICAL",
-                    "retention_pct": 48.0,
-                    "mastery_score": 0.40,
-                    "summary": "Routing interface for external cross-subnet packet forwarding."
-                }
-            ];
-            edges = [
-                {"source": "c_cidr_notation", "target": "c_ip_addressing_and_subnetting", "type": "depends_on"},
-                {"source": "c_subnet_masks_and_anding", "target": "c_ip_addressing_and_subnetting", "type": "depends_on"},
-                {"source": "c_subnet_masks_and_anding", "target": "c_cidr_notation", "type": "depends_on"},
-                {"source": "c_default_gateway", "target": "c_subnet_masks_and_anding", "type": "depends_on"}
-            ];
-        }
-
         status_str: str = "success" if len(nodes) > 0 else "no_lecture_context";
-        report {
+        self.result = {
             "status": status_str,
-            "subject": subject.name if subject else clean_subject,
-            "subject_id": subject.id if subject else target_subject_id,
+            "subject": resolved_subject_name,
+            "subject_id": resolved_subject_id,
             "total_nodes": len(nodes),
             "total_edges": len(edges),
             "nodes": nodes,
             "edges": edges
         };
+        report self.result;
     }
 }
 

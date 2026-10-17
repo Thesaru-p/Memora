@@ -37,6 +37,7 @@ cl def:pub MemoraDashboard() -> JsxElement {
         topic_text: str = "Loading",
         due_text: str = "Checking your schedule",
         streak_text: str = "—",
+        dashboard_code: str = "",
         retention_width: str = "0%",
         loading: bool = True,
         error_message: str = "";
@@ -57,7 +58,7 @@ cl def:pub MemoraDashboard() -> JsxElement {
         selected_slides: list = [],
         session_slides_count: int = 0;
 
-    def image_selected(encoded: str, name: str, size: int, mime_type: str, all_items = None) -> None {
+    def image_selected(encoded: str, name: str, size: int, mime_type: str, all_items: list[dict] | None = None) -> None {
         upload_error = "";
         if not mime_type.startswith("image/") {
             upload_error = "Choose a JPG, PNG, or WebP image.";
@@ -110,64 +111,35 @@ cl def:pub MemoraDashboard() -> JsxElement {
 
         try {
             total_items = len(selected_slides) if len(selected_slides) > 0 else 1;
-            last_concepts_count = 0;
+            image_payloads: list[str] = [];
+            for slide in selected_slides {
+                image_payloads.append("data:" + str(slide["mime_type"]) + ";base64," + str(slide["encoded"]));
+            }
+            if len(image_payloads) == 0 and image_b64 {
+                image_payloads.append(image_b64);
+            }
+
+            upload_status = "Extracting concepts from " + str(total_items) + " slide(s) with OpenRouter…";
+            result = root spawn ingest_lecture(
+                subject_name=upload_subject,
+                lecture_title=upload_title,
+                notes_text=upload_notes,
+                images_b64=image_payloads,
+                replace_existing=is_replace_initial
+            );
             processed_count = 0;
-
-            if len(selected_slides) > 1 {
-                idx = 0;
-                for slide in selected_slides {
-                    curr_name = str(slide["name"]);
-                    curr_b64 = "data:" + str(slide["mime_type"]) + ";base64," + str(slide["encoded"]);
-                    upload_status = "Extracting concepts from slide " + str(idx + 1) + " of " + str(total_items) + " (" + curr_name + ")…";
-
-                    slide_replace = is_replace_initial if idx == 0 else False;
-                    slide_notes = upload_notes if idx == 0 else "";
-
-                    result = root spawn ingest_lecture(
-                        subject_name=upload_subject,
-                        lecture_title=upload_title,
-                        notes_text=slide_notes,
-                        image_b64=curr_b64,
-                        replace_existing=slide_replace
-                    );
-
-                    if result.reports and len(result.reports) > 0 {
-                        data = result.reports[len(result.reports) - 1];
-                        if str(data["status"]) == "success" {
-                            last_concepts_count = int(data["total_concepts"]);
-                            processed_count += 1;
-                        } else {
-                            upload_error = "Slide " + curr_name + " failed: " + str(data["error"]);
-                            break;
-                        }
-                    } else {
-                        upload_error = "No result returned for slide " + curr_name;
-                        break;
-                    }
-                    idx += 1;
+            last_concepts_count = 0;
+            if result.reports and len(result.reports) > 0 {
+                data = result.reports[len(result.reports) - 1];
+                if str(data["status"]) == "success" {
+                    last_concepts_count = int(data["total_concepts"]);
+                    processed_count = int(data["slides_processed"]);
+                } else {
+                    upload_error = str(data["error"]);
+                    upload_status = "Extraction failed. No graph changes were made.";
                 }
             } else {
-                curr_b64 = image_b64 if image_b64 else ("data:" + str(selected_slides[0]["mime_type"]) + ";base64," + str(selected_slides[0]["encoded"]));
-                upload_status = "Extracting concepts with OpenRouter…";
-                result = root spawn ingest_lecture(
-                    subject_name=upload_subject,
-                    lecture_title=upload_title,
-                    notes_text=upload_notes,
-                    image_b64=curr_b64,
-                    replace_existing=is_replace_initial
-                );
-                if result.reports and len(result.reports) > 0 {
-                    data = result.reports[len(result.reports) - 1];
-                    if str(data["status"]) == "success" {
-                        last_concepts_count = int(data["total_concepts"]);
-                        processed_count = 1;
-                    } else {
-                        upload_error = str(data["error"]);
-                        upload_status = "Extraction failed.";
-                    }
-                } else {
-                    upload_error = "The ingestion endpoint returned no result.";
-                }
+                upload_error = "The ingestion endpoint returned no result.";
             }
 
             if not upload_error and processed_count > 0 {
@@ -240,6 +212,7 @@ cl def:pub MemoraDashboard() -> JsxElement {
                 topic_text = str(data["next_quiz_topic"]);
                 due_text = "Due in " + str(data["next_quiz_due_in_hours"]) + " hours";
                 streak_text = str(data["study_streak_days"]);
+                dashboard_code = str(data["code"]);
             } else {
                 error_message = "Dashboard data was unavailable.";
             }
@@ -265,8 +238,8 @@ cl def:pub MemoraDashboard() -> JsxElement {
         <View style={styles.header}>
             <View style={styles.mark}><Text style={styles.markText}>M</Text></View>
             <View style={{"flex": 1, "gap": 4}}>
-                <Text style={styles.label}>Memora · CS-301</Text>
-                <Text style={styles.heading}>Computer Networks</Text>
+                <Text style={styles.label}>{"Memora" + (" · " + dashboard_code if dashboard_code else "")}</Text>
+                <Text style={styles.heading}>{upload_subject}</Text>
             </View>
         </View>
         <View style={styles.card}>
