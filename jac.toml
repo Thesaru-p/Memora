@@ -6,9 +6,6 @@ entry-point = "main.jac"
 [run]
 diagnostics = "error"
 
-[serve]
-base_route_app = "app"
-
 [client]
 
 [dependencies.npm]
