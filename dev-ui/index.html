@@ -30,6 +30,10 @@
     .status { min-height: 24px; margin: 14px 0 0; font-size: .88rem; color: #aab2cc; }
     .status.ok { color: #69e0ad; }
     .status.error { color: #ff8c9b; }
+    .models { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 0 0 18px; }
+    .model { padding: 10px; border-radius: 10px; background: #0c1122; border: 1px solid #293152; }
+    .model strong { display: block; font-size: .72rem; color: #9da8ff; text-transform: uppercase; }
+    .model span { display: block; margin-top: 4px; color: #d7dcf1; font-size: .72rem; overflow-wrap: anywhere; }
     pre { min-height: 430px; max-height: 680px; overflow: auto; margin: 0; padding: 15px; border-radius: 12px; background: #070a12; border: 1px solid #252c48; color: #cad2ff; font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
     .hint { font-size: .78rem; margin: 7px 0 0; }
     @media (max-width: 780px) { header { align-items: start; flex-direction: column; } .grid { grid-template-columns: 1fr; } }
@@ -78,6 +82,12 @@
 
       <section class="card">
         <h2>Walker response</h2>
+        <div class="models" aria-label="Configured OpenRouter models">
+          <div class="model"><strong>Vision</strong><span>Nemotron 3.5 Super VL</span></div>
+          <div class="model"><strong>Reasoning</strong><span>Nemotron 3 Super 120B</span></div>
+          <div class="model"><strong>Evaluator</strong><span>Nemotron 3 Nano Omni 30B</span></div>
+          <div class="model"><strong>Fast agent</strong><span>LFM 2.5 2.6B</span></div>
+        </div>
         <pre id="result">Submit a lecture or probe an endpoint to see its JSON response.</pre>
       </section>
     </div>
