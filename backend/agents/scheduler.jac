@@ -41,6 +41,8 @@ walker:pub get_notifications {
         }
         now = time.time();
         due: list[dict] = [];
+        next_review: dict = {};
+        has_next_review = False;
         for lecture in [subject-->] {
             if isinstance(lecture, LectureNode) {
                 for concept in [lecture-->] {
@@ -50,6 +52,16 @@ walker:pub get_notifications {
                         if (concept.next_review_due > 0.0 and concept.next_review_due <= now) or concept.retrievability < 0.6 {
                             due.append({"id": concept.id, "name": concept.name, "due_time": concept.next_review_due,
                                 "retention": concept.retrievability});
+                        } elif concept.next_review_due > now {
+                            if not has_next_review or concept.next_review_due < next_review["due_time"] {
+                                next_review = {
+                                    "concept_id": concept.id,
+                                    "concept_name": concept.name,
+                                    "due_time": concept.next_review_due,
+                                    "hours_until_due": (concept.next_review_due - now) / 3600.0
+                                };
+                                has_next_review = True;
+                            }
                         }
                     }
                 }
@@ -65,6 +77,7 @@ walker:pub get_notifications {
                 "estimated_minutes": 3, "due_time": item["due_time"]
             });
         }
-        report {"status": "success", "notifications": self.alerts, "total_pending": len(self.alerts)};
+        report {"status": "success", "notifications": self.alerts, "total_pending": len(self.alerts),
+            "next_review": next_review if has_next_review else None};
     }
 }

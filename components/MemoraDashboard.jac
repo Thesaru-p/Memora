@@ -151,7 +151,15 @@ cl def:pub MemoraDashboard() -> JsxElement {
                 if str(data["status"]) == "success" {
                     notifications = data["notifications"] as list[dict];
                     count = len(notifications);
-                    review_alerts = "No reviews due." if count == 0 else str(count) + " review(s) due. " + str(notifications[0]["message"]);
+                    if count > 0 {
+                        review_alerts = str(count) + " review(s) due. " + str(notifications[0]["message"]);
+                    } elif data.get("next_review") is not None {
+                        upcoming = data["next_review"] as dict;
+                        hours = float(upcoming["hours_until_due"]);
+                        review_alerts = "No reviews due yet. Next: " + str(upcoming["concept_name"]) + " in about " + str(round(hours, 1)) + " hours.";
+                    } else {
+                        review_alerts = "No reviews scheduled for this subject yet.";
+                    }
                 } else {
                     review_alerts = str(data["error"]);
                 }

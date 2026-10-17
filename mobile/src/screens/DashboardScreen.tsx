@@ -1,7 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, RefreshControl } from 'react-native';
 import { api } from '../api/client';
-import { AppNotification, DashboardData } from '../types';
+import { DashboardData, ReviewSchedule } from '../types';
 
 interface Props {
   onStartQuiz: () => void;
@@ -18,7 +18,7 @@ export const DashboardScreen: React.FC<Props> = ({
 }) => {
   const [data, setData] = useState<DashboardData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
-  const [alerts, setAlerts] = useState<AppNotification[] | null>(null);
+  const [schedule, setSchedule] = useState<ReviewSchedule | null>(null);
   const [alertError, setAlertError] = useState('');
   const [alertsLoading, setAlertsLoading] = useState(false);
 
@@ -26,7 +26,7 @@ export const DashboardScreen: React.FC<Props> = ({
     setAlertsLoading(true);
     setAlertError('');
     try {
-      setAlerts(await api.getNotifications('Computer Networks'));
+      setSchedule(await api.getNotifications('Computer Networks'));
     } catch (e) {
       setAlertError(e instanceof Error ? e.message : 'Could not check reminders');
     } finally {
@@ -113,8 +113,14 @@ export const DashboardScreen: React.FC<Props> = ({
           <Text style={styles.quizStartBtnText}>{alertsLoading ? 'Checking…' : 'Check Review Alerts'}</Text>
         </TouchableOpacity>
         {!!alertError && <Text style={styles.alertMessage}>{alertError}</Text>}
-        {alerts !== null && alerts.length === 0 && <Text style={styles.alertMessage}>No reviews due right now.</Text>}
-        {alerts?.map((alert) => (
+        {schedule !== null && schedule.notifications.length === 0 && (
+          <Text style={styles.quizPromptDesc}>
+            {schedule.next_review
+              ? `No reviews due yet. Next: ${schedule.next_review.concept_name} in about ${schedule.next_review.hours_until_due.toFixed(1)} hours.`
+              : 'No reviews scheduled for this subject yet.'}
+          </Text>
+        )}
+        {schedule?.notifications.map((alert) => (
           <View key={alert.id} style={styles.alertItem}>
             <Text style={styles.quizPromptTitle}>{alert.title} · {alert.urgency}</Text>
             <Text style={styles.quizPromptDesc}>{alert.message}</Text>

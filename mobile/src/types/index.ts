@@ -149,3 +149,13 @@ export interface AppNotification {
   estimated_minutes?: number;
   due_time: number;
 }
+
+export interface ReviewSchedule {
+  notifications: AppNotification[];
+  next_review: {
+    concept_id: string;
+    concept_name: string;
+    due_time: number;
+    hours_until_due: number;
+  } | null;
+}

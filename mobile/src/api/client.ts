@@ -8,7 +8,7 @@ import {
   QuizEvaluationResult,
   KnowledgeGraphData,
   AnalyticsData,
-  AppNotification
+  ReviewSchedule
 } from '../types';
 
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
@@ -159,9 +159,9 @@ export const api = {
   },
 
   // 7. Get Notifications & Day-1 Alerts
-  async getNotifications(subjectName: string = 'Computer Networks'): Promise<AppNotification[]> {
-    const data = await callWalker<{ status: string; error?: string; notifications: AppNotification[] }>('get_notifications', { subject_name: subjectName });
+  async getNotifications(subjectName: string = 'Computer Networks'): Promise<ReviewSchedule> {
+    const data = await callWalker<ReviewSchedule & { status: string; error?: string }>('get_notifications', { subject_name: subjectName });
     if (data.status !== 'success') throw new Error(data.error || 'Notifications unavailable');
-    return data.notifications || [];
+    return { notifications: data.notifications || [], next_review: data.next_review || null };
   },
 };
