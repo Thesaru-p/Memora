@@ -63,7 +63,7 @@ node QuestionNode {
     has question_type: str = "MCQ";      # MCQ | ACTIVE_RECALL
     has explanation: str = "";           # Pedagogical misconception explanation
     has student_answer: str = "";
-    has is_correct: bool = false;
+    has is_correct: bool = False;
 }
 
 # -------------------------------------------------------------

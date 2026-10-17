@@ -12,7 +12,7 @@ walker build_lecture_graph {
     has concepts: list[RawExtractedConcept];
     has created_nodes_count: int = 0;
 
-    can construct with `root entry {
+    can construct with Root entry {
         now: float = time.time();
         
         # 1. Create or link Subject Node from root

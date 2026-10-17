@@ -1,12 +1,15 @@
 # Lecture Analyzer Agent (Dev 2 Domain)
-# Uses by llm() via OpenRouter (nvidia/nemotron-3.5-super-vl:free)
-# to analyze lecture content (text, slide OCR, notes) and extract atomic concepts.
+# Meaning-typed extraction through OpenRouter and Nemotron Super VL.
 
-# When mtllm plugin is installed (pip install mtllm):
-# import from mtllm.llms { OpenAI }
-# glob analyzer_llm = OpenAI(model_name="nvidia/nemotron-3.5-super-vl:free", api_base="https://openrouter.ai/api/v1");
+import os;
+import from byllm.lib { Image, Model }
 
-# Structured concept definition extracted from lecture notes
+glob analyzer_llm = Model(
+    model_name="openrouter/nvidia/nemotron-3.5-super-vl:free",
+    api_key=os.environ.get("OPENROUTER_API_KEY", ""),
+    config={"api_base": "https://openrouter.ai/api/v1"}
+);
+
 obj RawExtractedConcept {
     has name: str;
     has summary: str;
@@ -15,39 +18,27 @@ obj RawExtractedConcept {
     has prerequisites: list[str] = [];
 }
 
-# Meaning-Typed LLM function for extracting concepts from lecture material
-def extract_concepts_from_text(lecture_title: str, notes_content: str) -> list[RawExtractedConcept] {
-    # Default high-fidelity extractor for Computer Networks
-    # When OpenRouter key is provided with mtllm, this executes via by llm()
-    concepts: list[RawExtractedConcept] = [
-        RawExtractedConcept(
-            name="IP Addressing & Subnetting",
-            summary="Hierarchical addressing scheme using network prefix and host identifier.",
-            formula_or_rule="Host Capacity = 2^(32 - Prefix) - 2",
-            difficulty=6.0,
-            prerequisites=[]
-        ),
-        RawExtractedConcept(
-            name="CIDR Notation",
-            summary="Classless Inter-Domain Routing replaces traditional A/B/C classes with slash prefix notation.",
-            formula_or_rule="/24 indicates 24 network bits and 8 host bits",
-            difficulty=5.0,
-            prerequisites=["IP Addressing & Subnetting"]
-        ),
-        RawExtractedConcept(
-            name="Subnet Masks & ANDing",
-            summary="Bitwise logical AND operation between IP address and subnet mask determines the Network Address.",
-            formula_or_rule="Network Address = IP & Subnet Mask",
-            difficulty=7.0,
-            prerequisites=["IP Addressing & Subnetting", "CIDR Notation"]
-        ),
-        RawExtractedConcept(
-            name="Default Gateway",
-            summary="The routing interface that forwards packets destined outside the local broadcast domain.",
-            formula_or_rule="Packets matching local subnet are delivered via ARP; external packets go to Gateway.",
-            difficulty=4.0,
-            prerequisites=["Subnet Masks & ANDing"]
-        )
-    ];
-    return concepts;
-}
+sem RawExtractedConcept = "An atomic, independently testable concept from one lecture.";
+sem RawExtractedConcept.name = "A concise concept name used as its graph label.";
+sem RawExtractedConcept.summary = "One sentence grounded only in the supplied lecture material.";
+sem RawExtractedConcept.formula_or_rule = "The key formula or rule, or an empty string when none is present.";
+sem RawExtractedConcept.difficulty = "Estimated learning difficulty from 1.0 (easy) to 10.0 (hard).";
+sem RawExtractedConcept.prerequisites = "Names of other extracted concepts required first; use exact names from this result.";
+
+sem extract_concepts_from_text = "Extract 4 to 8 atomic concepts from the supplied lecture title and transcript. Stay grounded in the material, merge duplicates, and order concepts from foundational to advanced.";
+sem extract_concepts_from_text.lecture_title = "The lecture title, used only to establish subject context.";
+sem extract_concepts_from_text.notes_content = "The raw lecture transcript or pasted notes. This is the source of truth.";
+def extract_concepts_from_text(
+    lecture_title: str,
+    notes_content: str
+) -> list[RawExtractedConcept] by analyzer_llm(temperature=0.1);
+
+sem extract_concepts_from_image = "Read the supplied slide, whiteboard, or handwritten-note image and extract 4 to 8 atomic concepts. Combine visible content with the optional transcript, stay grounded in those sources, merge duplicates, and order concepts from foundational to advanced.";
+sem extract_concepts_from_image.lecture_title = "The lecture title, used only to establish subject context.";
+sem extract_concepts_from_image.notes_content = "Optional accompanying transcript or notes; may be empty.";
+sem extract_concepts_from_image.image = "A lecture slide, whiteboard photo, or handwritten-note image.";
+def extract_concepts_from_image(
+    lecture_title: str,
+    notes_content: str,
+    image: Image
+) -> list[RawExtractedConcept] by analyzer_llm(temperature=0.1);
