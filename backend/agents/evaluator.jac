@@ -1,9 +1,12 @@
 # Quiz Evaluator & Calibration Agent (Dev 3 Domain)
-# Evaluates student submissions, diagnoses misconceptions, and recalibrates memory curve parameters.
+# Uses nvidia/nemotron-3-super:free via OpenRouter for fast, intelligent semantic grading.
+# Replaces rigid string comparisons with pedagogical error diagnosis.
 
 import time;
+import json;
 import from backend.graph { ConceptNode }
 import from backend.ebbinghaus { update_stability, calc_next_review_days, classify_retention_status }
+import from backend.config { query_openrouter, MODEL_EVALUATOR }
 
 obj StudentAnswerSubmission {
     has question_id: str;
@@ -13,13 +16,36 @@ obj StudentAnswerSubmission {
     has explanation: str;
 }
 
-obj EvaluatedQuestionResult {
-    has question_id: str;
-    has concept_id: str;
-    has is_correct: bool;
-    has submitted_answer: str;
-    has correct_answer: str;
-    has explanation: str;
+# Uses Nemotron 3 Super to semantically evaluate student response, accept synonyms,
+# and generate custom diagnostic feedback on mistakes.
+def semantically_evaluate_answer(question_prompt: str, student_answer: str, correct_answer: str, default_explanation: str) -> dict {
+    sys_prompt = "You are a friendly, encouraging computer science professor grading a student quiz. Accept conceptual equivalents, synonyms, and acronyms (e.g., 'CIDR' equals 'Classless Inter-Domain Routing'). Return ONLY a JSON object with keys: is_correct (bool), score (float between 0.0 and 1.0), and explanation (1-2 sentences explaining why it is correct or diagnosing the student's exact misconception).";
+    user_prompt = f"Correct Answer: {correct_answer}\nStudent Answer: {student_answer}\nStandard Explanation: {default_explanation}";
+
+    raw_response = query_openrouter(MODEL_EVALUATOR, sys_prompt, user_prompt);
+    if raw_response {
+        try {
+            parsed = json.loads(raw_response);
+            if isinstance(parsed, dict) and "is_correct" in parsed {
+                return {
+                    "is_correct": bool(parsed.get("is_correct", false)),
+                    "score": float(parsed.get("score", 0.0)),
+                    "explanation": str(parsed.get("explanation", default_explanation))
+                };
+            }
+        } except Exception as e {
+            print(f"[Semantic Evaluator Fallback] {e}");
+        }
+    }
+
+    # High-accuracy fallback
+    is_right: bool = (student_answer.strip().lower() == correct_answer.strip().lower());
+    score_val: float = 1.0 if is_right else 0.0;
+    return {
+        "is_correct": is_right,
+        "score": score_val,
+        "explanation": default_explanation
+    };
 }
 
 walker evaluate_quiz_submission {
@@ -38,8 +64,16 @@ walker evaluate_quiz_submission {
 
         for sub in self.submissions {
             self.total_items += 1;
-            is_right: bool = (sub.submitted_answer.strip().lower() == sub.correct_answer.strip().lower());
-            if is_right {
+            
+            # Intelligent Semantic Grading with Nemotron 3 Super
+            eval_res = semantically_evaluate_answer(
+                question_prompt="",
+                student_answer=sub.submitted_answer,
+                correct_answer=sub.correct_answer,
+                default_explanation=sub.explanation
+            );
+
+            if eval_res["is_correct"] {
                 self.correct_items += 1;
             } else {
                 self.missed_explanations.append({
@@ -47,7 +81,7 @@ walker evaluate_quiz_submission {
                     "concept_id": sub.concept_id,
                     "your_answer": sub.submitted_answer,
                     "correct_answer": sub.correct_answer,
-                    "pedagogical_explanation": sub.explanation
+                    "pedagogical_explanation": eval_res["explanation"]
                 });
             }
         }
