@@ -191,3 +191,147 @@ test "cross-lecture prerequisite edge linking within same subject" {
     assert prereqs[0].name == "Macromolecules";
     assert prereqs[0].subject_id == "subj_biochemistry";
 }
+
+test "multi-slide upload in append mode accumulates concepts across slides under single lecture" {
+    # Slide 1: Initial concepts
+    slide1_concepts = [
+        RawExtractedConcept(name="Carboxylation", summary="CO2 fixation with RuBP", formula_or_rule="RuBP + CO2 -> PGA", difficulty=5.0, prerequisites=[]),
+        RawExtractedConcept(name="RuBP", summary="5-carbon acceptor molecule", formula_or_rule="C5-P", difficulty=4.0, prerequisites=[]),
+        RawExtractedConcept(name="Reduction", summary="Reduction of PGA to G3P", formula_or_rule="", difficulty=5.0, prerequisites=["Carboxylation"])
+    ];
+
+    b1 = root spawn build_lecture_graph(
+        subject_name="Plant Bio",
+        lecture_title="Calvin Cycle",
+        raw_notes="Slide 1 notes",
+        concepts=slide1_concepts,
+        replace_existing=False
+    );
+    assert b1.total_lecture_concepts == 3;
+    assert b1.created_nodes_count == 3;
+
+    # Slide 2: Next slide with additional concepts that depend on slide 1
+    slide2_concepts = [
+        RawExtractedConcept(name="G3P Sugar", summary="Triose phosphate product", formula_or_rule="C3-P", difficulty=5.0, prerequisites=["Reduction"]),
+        RawExtractedConcept(name="RuBP Regeneration", summary="Regenerates RuBP using ATP", formula_or_rule="", difficulty=6.0, prerequisites=["G3P Sugar", "RuBP"])
+    ];
+
+    b2 = root spawn build_lecture_graph(
+        subject_name="Plant Bio",
+        lecture_title="Calvin Cycle",
+        raw_notes="Slide 2 notes",
+        concepts=slide2_concepts,
+        replace_existing=False
+    );
+    assert b2.total_lecture_concepts == 5;
+    assert b2.created_nodes_count == 2;
+
+    # Verify lecture node has accumulated 5 concepts
+    subj = [s for s in [root-->] if isinstance(s, SubjectNode) and s.id == "subj_plant_bio"][0];
+    calvin_lec = [l for l in [subj-->] if isinstance(l, LectureNode) and l.title == "Calvin Cycle"][0];
+    lec_concepts = [c for c in [calvin_lec-->] if isinstance(c, ConceptNode)];
+    assert len(lec_concepts) == 5;
+    assert calvin_lec.concept_count == 5;
+
+    # Verify cross-slide prerequisite edge
+    regeneration = [c for c in lec_concepts if c.name == "RuBP Regeneration"][0];
+    reg_prereqs = [p.name for p in [regeneration->:depends_on:->]];
+    assert "G3P Sugar" in reg_prereqs;
+    assert "RuBP" in reg_prereqs;
+}
+
+test "replace_existing mode clears old concepts and installs fresh concepts" {
+    # First upload: 3 concepts
+    initial_concepts = [
+        RawExtractedConcept(name="Old Topic 1", summary="Old summary 1", formula_or_rule="", difficulty=4.0, prerequisites=[]),
+        RawExtractedConcept(name="Old Topic 2", summary="Old summary 2", formula_or_rule="", difficulty=5.0, prerequisites=["Old Topic 1"]),
+        RawExtractedConcept(name="Old Topic 3", summary="Old summary 3", formula_or_rule="", difficulty=6.0, prerequisites=[])
+    ];
+
+    root spawn build_lecture_graph(
+        subject_name="Genetics",
+        lecture_title="Mendelian Inheritance",
+        raw_notes="Draft 1 notes",
+        concepts=initial_concepts,
+        replace_existing=False
+    );
+
+    # Second upload with replace_existing=True: Replaces with 2 completely fresh concepts
+    fresh_concepts = [
+        RawExtractedConcept(name="Law of Segregation", summary="Alleles separate during gamete formation", formula_or_rule="3:1 ratio", difficulty=4.0, prerequisites=[]),
+        RawExtractedConcept(name="Law of Independent Assortment", summary="Genes sort independently", formula_or_rule="9:3:3:1 ratio", difficulty=5.0, prerequisites=["Law of Segregation"])
+    ];
+
+    b_replace = root spawn build_lecture_graph(
+        subject_name="Genetics",
+        lecture_title="Mendelian Inheritance",
+        raw_notes="Final verified notes",
+        concepts=fresh_concepts,
+        replace_existing=True
+    );
+
+    assert b_replace.total_lecture_concepts == 2;
+    assert b_replace.created_nodes_count == 2;
+
+    subj = [s for s in [root-->] if isinstance(s, SubjectNode) and s.id == "subj_genetics"][0];
+    lec = [l for l in [subj-->] if isinstance(l, LectureNode) and l.title == "Mendelian Inheritance"][0];
+    current_concepts = [c for c in [lec-->] if isinstance(c, ConceptNode)];
+    assert len(current_concepts) == 2;
+    names = [c.name for c in current_concepts];
+    assert "Law of Segregation" in names;
+    assert "Law of Independent Assortment" in names;
+    assert "Old Topic 1" not in names;
+    assert "Old Topic 2" not in names;
+    assert "Old Topic 3" not in names;
+}
+
+test "multi-slide append mode updates overlapping concept summaries while preserving retention metrics" {
+    initial_concepts = [
+        RawExtractedConcept(name="DNA Polymerase", summary="Initial rough summary", formula_or_rule="5' to 3'", difficulty=5.0, prerequisites=[])
+    ];
+
+    root spawn build_lecture_graph(
+        subject_name="Molecular Bio",
+        lecture_title="DNA Replication",
+        raw_notes="",
+        concepts=initial_concepts,
+        replace_existing=False
+    );
+
+    subj = [s for s in [root-->] if isinstance(s, SubjectNode) and s.id == "subj_molecular_bio"][0];
+    lec = [l for l in [subj-->] if isinstance(l, LectureNode) and l.title == "DNA Replication"][0];
+    c_node = [c for c in [lec-->] if isinstance(c, ConceptNode) and c.name == "DNA Polymerase"][0];
+
+    # Simulate student studying this concept
+    c_node.stability = 4.2;
+    c_node.retrievability = 0.88;
+    c_node.mastery_score = 0.75;
+    c_node.review_count = 2;
+
+    # Ingest next slide that re-mentions DNA Polymerase with expanded details + 1 new concept
+    slide2_concepts = [
+        RawExtractedConcept(name="DNA Polymerase", summary="Expanded summary: Synthesizes DNA with proofreading 3'-5' exonuclease", formula_or_rule="5'->3' synthesis", difficulty=6.0, prerequisites=[]),
+        RawExtractedConcept(name="Helicase", summary="Unwinds double helix at replication fork", formula_or_rule="", difficulty=4.0, prerequisites=["DNA Polymerase"])
+    ];
+
+    root spawn build_lecture_graph(
+        subject_name="Molecular Bio",
+        lecture_title="DNA Replication",
+        raw_notes="",
+        concepts=slide2_concepts,
+        replace_existing=False
+    );
+
+    # Verify DNA Polymerase retained student's learning history while updating pedagogical summary
+    assert c_node.stability == 4.2;
+    assert c_node.retrievability == 0.88;
+    assert c_node.mastery_score == 0.75;
+    assert c_node.review_count == 2;
+    assert "proofreading" in c_node.summary;
+    assert c_node.difficulty == 6.0;
+
+    # Total concepts is now 2
+    all_c = [c for c in [lec-->] if isinstance(c, ConceptNode)];
+    assert len(all_c) == 2;
+}
+

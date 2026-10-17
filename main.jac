@@ -33,11 +33,49 @@ walker:pub ingest_lecture {
     has lecture_title: str = "IP Subnetting & CIDR";
     has notes_text: str = "";
     has image_b64: str = "";
+    has images_b64: list[str] = [];
+    has replace_existing: bool = False;
+    has result: dict = {};
 
     can process with `Root entry {
+        all_images: list[str] = [];
+        if self.images_b64 and len(self.images_b64) > 0 {
+            for img in self.images_b64 {
+                if img {
+                    all_images.append(img);
+                }
+            }
+        } elif self.image_b64 {
+            all_images.append(self.image_b64);
+        }
+
         # Agent 1: Analyze lecture notes (text or image) and extract atomic concepts
-        extracted = extract_concepts_from_text(self.lecture_title, self.notes_text, self.image_b64);
-        if len(extracted) == 0 {
+        extracted_all: list[RawExtractedConcept] = [];
+        if len(all_images) > 0 {
+            img_idx = 0;
+            for img in all_images {
+                slide_notes = self.notes_text if img_idx == 0 else "";
+                extracted = extract_concepts_from_text(self.lecture_title, slide_notes, img);
+                for c in extracted {
+                    # deduplicate by name within the batch
+                    exists_in_batch = False;
+                    for prev in extracted_all {
+                        if prev.name.strip().lower() == c.name.strip().lower() {
+                            exists_in_batch = True;
+                            break;
+                        }
+                    }
+                    if not exists_in_batch {
+                        extracted_all.append(c);
+                    }
+                }
+                img_idx += 1;
+            }
+        } else {
+            extracted_all = extract_concepts_from_text(self.lecture_title, self.notes_text, "");
+        }
+
+        if len(extracted_all) == 0 {
             report {
                 "status": "error",
                 "error": "AI concept extraction failed. No graph nodes were created. Check the OpenRouter status and server output, then retry.",
@@ -54,11 +92,12 @@ walker:pub ingest_lecture {
             subject_name=self.subject_name,
             lecture_title=self.lecture_title,
             raw_notes=self.notes_text,
-            concepts=extracted
+            concepts=extracted_all,
+            replace_existing=self.replace_existing
         );
 
         concept_summaries: list[dict] = [];
-        for c in extracted {
+        for c in extracted_all {
             concept_summaries.append({
                 "name": c.name,
                 "summary": c.summary,
@@ -68,15 +107,22 @@ walker:pub ingest_lecture {
             });
         }
 
-        report {
+        total_in_lecture = builder.total_lecture_concepts if builder.total_lecture_concepts > 0 else len(concept_summaries);
+
+        self.result = {
             "status": "success",
             "subject": self.subject_name,
             "lecture_title": self.lecture_title,
             "extraction_source": "openrouter",
+            "mode": "replace" if self.replace_existing else "append",
+            "slides_processed": max(1, len(all_images)),
+            "new_concepts_extracted": len(concept_summaries),
             "concepts_extracted": concept_summaries,
-            "total_concepts": len(concept_summaries),
+            "total_concepts": total_in_lecture,
+            "total_lecture_concepts": total_in_lecture,
             "day_1_quiz_scheduled_in_hours": 24
         };
+        report self.result;
     }
 }
 
@@ -384,9 +430,9 @@ walker:pub get_graph_data {
     }
 }
 
-import from components.MemoraDashboard { MemoraDashboard }
+cl import from components.MemoraDashboard { MemoraDashboard }
 
-def:pub app() -> JsxElement {
+cl def:pub app() -> JsxElement {
     return <MemoraDashboard />;
 }
 

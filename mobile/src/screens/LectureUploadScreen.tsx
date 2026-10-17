@@ -11,6 +11,8 @@ export const LectureUploadScreen: React.FC<Props> = ({ onBack, onSuccess }) => {
   const [subject, setSubject] = useState('Computer Networks');
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
+  const [uploadMode, setUploadMode] = useState<'append' | 'replace'>('append');
+  const [slideCount, setSlideCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [pipelineStage, setPipelineStage] = useState('');
 
@@ -32,11 +34,15 @@ export const LectureUploadScreen: React.FC<Props> = ({ onBack, onSuccess }) => {
     }, 2200);
 
     try {
-      await api.ingestLecture(subject, title, notes);
+      const res: any = await api.ingestLecture(subject, title, notes, {
+        replaceExisting: uploadMode === 'replace',
+      });
       setLoading(false);
+      const totalConcepts = res?.total_lecture_concepts ?? res?.total_concepts ?? 4;
+      const modeText = uploadMode === 'replace' ? 'Replaced' : 'Accumulated';
       Alert.alert(
         'Lecture Knowledge Graph Built! 🚀',
-        '4 core concepts extracted and linked to your subject graph. Your Day-1 micro-quiz is scheduled for tomorrow!',
+        `${modeText} lecture graph now has ${totalConcepts} core concepts linked. Your Day-1 micro-quiz is scheduled for tomorrow!`,
         [{ text: 'View Dashboard', onPress: onSuccess }]
       );
     } catch (e) {
@@ -71,17 +77,52 @@ export const LectureUploadScreen: React.FC<Props> = ({ onBack, onSuccess }) => {
         />
       </View>
 
+      {/* Ingestion Mode Option */}
+      <View style={styles.inputGroup}>
+        <Text style={styles.label}>UPLOAD MODE OPTION</Text>
+        <View style={styles.modeRow}>
+          <TouchableOpacity
+            style={[styles.modePill, uploadMode === 'append' && styles.modePillActive]}
+            onPress={() => setUploadMode('append')}
+          >
+            <Text style={[styles.modePillText, uploadMode === 'append' && styles.modePillTextActive]}>
+              ➕ Append Slides
+            </Text>
+          </TouchableOpacity>
+          <TouchableOpacity
+            style={[styles.modePill, uploadMode === 'replace' && styles.modePillActive]}
+            onPress={() => setUploadMode('replace')}
+          >
+            <Text style={[styles.modePillText, uploadMode === 'replace' && styles.modePillTextActive]}>
+              🔄 Replace Lecture
+            </Text>
+          </TouchableOpacity>
+        </View>
+        <Text style={styles.hintText}>
+          {uploadMode === 'append'
+            ? 'Append mode: Multiple slides accumulate concepts without losing prior reviews.'
+            : 'Replace mode: Clears previous lecture concepts and starts fresh.'}
+        </Text>
+      </View>
+
       {/* Multimodal Action Pills */}
       <View style={styles.actionRow}>
         <TouchableOpacity
           style={styles.mediaPill}
           onPress={() => {
-            setTitle('TCP 3-Way Handshake & Flow Control');
-            setNotes('Photos of whiteboard: SYN -> SYN-ACK -> ACK sequence, sliding window protocol, congestion avoidance.');
-            Alert.alert('Photo Simulated', 'Captured 2 lecture slide photos.');
+            const nextCount = slideCount + 1;
+            setSlideCount(nextCount);
+            if (!title) {
+              setTitle('TCP 3-Way Handshake & Flow Control');
+            }
+            const slideNote = `[Slide ${nextCount}] SYN -> SYN-ACK -> ACK sequence, sliding window protocol, flow control.`;
+            setNotes(prev => (prev ? `${prev}\n\n${slideNote}` : slideNote));
+            Alert.alert('Slide Photo Attached', `Captured slide photo #${nextCount}.`);
           }}
         >
-          <Text style={styles.mediaPillText}>📷 Take Slide Photo</Text>
+          <Text style={styles.mediaPillText}>
+            {slideCount > 0 ? `📷 Add Slide #${slideCount + 1}` : '📷 Take Slide Photo'}
+          </Text>
         </TouchableOpacity>
 
         <TouchableOpacity
@@ -95,6 +136,15 @@ export const LectureUploadScreen: React.FC<Props> = ({ onBack, onSuccess }) => {
           <Text style={styles.mediaPillText}>✍️ Handwritten Note</Text>
         </TouchableOpacity>
       </View>
+
+      {slideCount > 0 && (
+        <View style={styles.slideCounterRow}>
+          <Text style={styles.slideCounterText}>📁 {slideCount} slide photos attached</Text>
+          <TouchableOpacity onPress={() => { setSlideCount(0); setNotes(''); }}>
+            <Text style={styles.clearBtnText}>Clear</Text>
+          </TouchableOpacity>
+        </View>
+      )}
 
       <View style={styles.inputGroup}>
         <Text style={styles.label}>LECTURE NOTES / TRANSCRIPT</Text>
@@ -116,7 +166,9 @@ export const LectureUploadScreen: React.FC<Props> = ({ onBack, onSuccess }) => {
         </View>
       ) : (
         <TouchableOpacity style={styles.submitBtn} onPress={handleUpload}>
-          <Text style={styles.submitBtnText}>Build Knowledge Graph</Text>
+          <Text style={styles.submitBtnText}>
+            {slideCount > 1 ? `Build Graph (${slideCount} Slides)` : 'Build Knowledge Graph'}
+          </Text>
         </TouchableOpacity>
       )}
     </ScrollView>
@@ -133,6 +185,15 @@ const styles = StyleSheet.create({
   label: { fontSize: 11, fontWeight: '800', color: '#94A3B8', letterSpacing: 1, marginBottom: 6 },
   input: { backgroundColor: '#1E293B', borderRadius: 10, padding: 14, color: '#FFFFFF', fontSize: 15, borderWidth: 1, borderColor: '#334155' },
   textArea: { height: 140, textAlignVertical: 'top' },
+  modeRow: { flexDirection: 'row', gap: 10, marginBottom: 6 },
+  modePill: { flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', alignItems: 'center' },
+  modePillActive: { backgroundColor: '#6366F1', borderColor: '#818CF8' },
+  modePillText: { color: '#94A3B8', fontSize: 13, fontWeight: '600' },
+  modePillTextActive: { color: '#FFFFFF', fontWeight: '800' },
+  hintText: { color: '#94A3B8', fontSize: 12, lineHeight: 18, marginTop: 4 },
+  slideCounterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1E293B', padding: 10, borderRadius: 8, marginBottom: 16 },
+  slideCounterText: { color: '#818CF8', fontSize: 13, fontWeight: '700' },
+  clearBtnText: { color: '#EF4444', fontSize: 12, fontWeight: '700' },
   actionRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
   mediaPill: { backgroundColor: '#1E1B4B', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#6366F1', width: '48%', alignItems: 'center' },
   mediaPillText: { color: '#C7D2FE', fontSize: 12, fontWeight: '700' },

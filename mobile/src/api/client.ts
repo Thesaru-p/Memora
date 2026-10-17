@@ -59,18 +59,31 @@ export const api = {
   },
 
   // 2. Ingest lecture notes (Text or Slide transcription)
-  async ingestLecture(subjectName: string, title: string, notesText: string) {
+  async ingestLecture(
+    subjectName: string,
+    title: string,
+    notesText: string,
+    options?: {
+      replaceExisting?: boolean;
+      imageB64?: string;
+      imagesB64?: string[];
+    }
+  ) {
     try {
       return await callWalker('ingest_lecture', {
         subject_name: subjectName,
         lecture_title: title,
         notes_text: notesText,
+        replace_existing: options?.replaceExisting ?? false,
+        image_b64: options?.imageB64 ?? '',
+        images_b64: options?.imagesB64 ?? [],
       });
     } catch {
       return {
         status: 'success',
         subject: subjectName,
         lecture_title: title,
+        mode: options?.replaceExisting ? 'replace' : 'append',
         concepts_extracted: [
           { name: 'IP Addressing & Subnetting', summary: 'Hierarchical addressing scheme.', difficulty: 6.0 },
           { name: 'CIDR Notation', summary: 'Slash prefix notation.', difficulty: 5.0 },
@@ -78,6 +91,7 @@ export const api = {
           { name: 'Default Gateway', summary: 'Routing interface for external packets.', difficulty: 4.0 },
         ],
         total_concepts: 4,
+        total_lecture_concepts: 4,
         day_1_quiz_scheduled_in_hours: 24,
       };
     }

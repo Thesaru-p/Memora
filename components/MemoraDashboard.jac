@@ -21,7 +21,14 @@ cl glob styles = StyleSheet.create({
     "input": {"padding": 14, "borderRadius": 12, "borderWidth": 1, "borderColor": "#cfd9d4", "backgroundColor": "#ffffff", "color": "#14251f", "fontSize": 15},
     "textArea": {"height": 100, "textAlignVertical": "top"},
     "button": {"padding": 16, "borderRadius": 14, "backgroundColor": "#008565", "alignItems": "center"},
-    "buttonText": {"fontSize": 16, "fontWeight": "600", "color": "#ffffff"}
+    "buttonText": {"fontSize": 16, "fontWeight": "600", "color": "#ffffff"},
+    "modeRow": {"flexDirection": "row", "gap": 8, "marginTop": 2},
+    "modePill": {"flex": 1, "padding": 12, "borderRadius": 12, "backgroundColor": "#f0f4f2", "borderWidth": 1, "borderColor": "#cfd9d4", "alignItems": "center"},
+    "modePillActive": {"backgroundColor": "#008565", "borderColor": "#008565"},
+    "modePillText": {"fontSize": 13, "fontWeight": "600", "color": "#475569"},
+    "modePillTextActive": {"fontSize": 13, "fontWeight": "700", "color": "#ffffff"},
+    "badge": {"paddingHorizontal": 10, "paddingVertical": 6, "borderRadius": 8, "backgroundColor": "#e7f5f0"},
+    "badgeText": {"fontSize": 13, "fontWeight": "600", "color": "#006b52"}
 });
 
 cl def:pub MemoraDashboard() -> JsxElement {
@@ -43,23 +50,42 @@ cl def:pub MemoraDashboard() -> JsxElement {
         upload_notes: str = "",
         image_b64: str = "",
         image_name: str = "",
-        upload_status: str = "Choose a slide photo to test vision extraction.",
+        upload_status: str = "Choose slide photo(s) to test vision extraction.",
         upload_error: str = "",
-        uploading: bool = False;
+        uploading: bool = False,
+        ingestion_mode: str = "append",
+        selected_slides: list = [],
+        session_slides_count: int = 0;
 
-    def image_selected(encoded: str, name: str, size: int, mime_type: str) -> None {
-        image_b64 = "";
-        image_name = "";
+    def image_selected(encoded: str, name: str, size: int, mime_type: str, all_items = None) -> None {
         upload_error = "";
         if not mime_type.startswith("image/") {
             upload_error = "Choose a JPG, PNG, or WebP image.";
-        } elif size > 5242880 {
+            return;
+        }
+        if size > 5242880 {
             upload_error = "Image is larger than 5 MB. Choose a smaller photo.";
-        } elif not encoded {
+            return;
+        }
+        if not encoded {
             upload_error = "The browser could not read that image.";
+            return;
+        }
+
+        if all_items and len(all_items) > 1 {
+            selected_slides = all_items;
+            image_b64 = "data:" + mime_type + ";base64," + encoded;
+            image_name = name;
+            upload_status = str(len(all_items)) + " slides selected and ready to ingest.";
         } else {
             image_b64 = "data:" + mime_type + ";base64," + encoded;
             image_name = name;
+            selected_slides = [{
+                "encoded": encoded,
+                "name": name,
+                "size": size,
+                "mime_type": mime_type
+            }];
             upload_status = name + " is ready to upload.";
         }
     }
@@ -74,35 +100,89 @@ cl def:pub MemoraDashboard() -> JsxElement {
             upload_error = "Enter a lecture title.";
             return;
         }
-        if not image_b64 {
-            upload_error = "Choose an image first.";
+        if len(selected_slides) == 0 and not image_b64 {
+            upload_error = "Choose slide photo(s) first.";
             return;
         }
 
         uploading = True;
-        upload_status = "Extracting concepts with OpenRouter…";
+        is_replace_initial = (ingestion_mode == "replace");
+
         try {
-            result = root spawn ingest_lecture(
-                subject_name=upload_subject,
-                lecture_title=upload_title,
-                notes_text=upload_notes,
-                image_b64=image_b64
-            );
-            if result.reports and len(result.reports) > 0 {
-                data = result.reports[len(result.reports) - 1];
-                if str(data["status"]) == "success" {
-                    upload_status = "Success · " + str(data["total_concepts"]) + " concepts extracted from " + image_name;
-                    image_b64 = "";
-                    load_overview();
-                } else {
-                    upload_error = str(data["error"]);
-                    upload_status = "Extraction failed.";
+            total_items = len(selected_slides) if len(selected_slides) > 0 else 1;
+            last_concepts_count = 0;
+            processed_count = 0;
+
+            if len(selected_slides) > 1 {
+                idx = 0;
+                for slide in selected_slides {
+                    curr_name = str(slide["name"]);
+                    curr_b64 = "data:" + str(slide["mime_type"]) + ";base64," + str(slide["encoded"]);
+                    upload_status = "Extracting concepts from slide " + str(idx + 1) + " of " + str(total_items) + " (" + curr_name + ")…";
+
+                    slide_replace = is_replace_initial if idx == 0 else False;
+                    slide_notes = upload_notes if idx == 0 else "";
+
+                    result = root spawn ingest_lecture(
+                        subject_name=upload_subject,
+                        lecture_title=upload_title,
+                        notes_text=slide_notes,
+                        image_b64=curr_b64,
+                        replace_existing=slide_replace
+                    );
+
+                    if result.reports and len(result.reports) > 0 {
+                        data = result.reports[len(result.reports) - 1];
+                        if str(data["status"]) == "success" {
+                            last_concepts_count = int(data["total_concepts"]);
+                            processed_count += 1;
+                        } else {
+                            upload_error = "Slide " + curr_name + " failed: " + str(data["error"]);
+                            break;
+                        }
+                    } else {
+                        upload_error = "No result returned for slide " + curr_name;
+                        break;
+                    }
+                    idx += 1;
                 }
             } else {
-                upload_error = "The ingestion endpoint returned no result.";
+                curr_b64 = image_b64 if image_b64 else ("data:" + str(selected_slides[0]["mime_type"]) + ";base64," + str(selected_slides[0]["encoded"]));
+                upload_status = "Extracting concepts with OpenRouter…";
+                result = root spawn ingest_lecture(
+                    subject_name=upload_subject,
+                    lecture_title=upload_title,
+                    notes_text=upload_notes,
+                    image_b64=curr_b64,
+                    replace_existing=is_replace_initial
+                );
+                if result.reports and len(result.reports) > 0 {
+                    data = result.reports[len(result.reports) - 1];
+                    if str(data["status"]) == "success" {
+                        last_concepts_count = int(data["total_concepts"]);
+                        processed_count = 1;
+                    } else {
+                        upload_error = str(data["error"]);
+                        upload_status = "Extraction failed.";
+                    }
+                } else {
+                    upload_error = "The ingestion endpoint returned no result.";
+                }
+            }
+
+            if not upload_error and processed_count > 0 {
+                session_slides_count += processed_count;
+                mode_label = "replaced lecture · " if is_replace_initial else "accumulated · ";
+                upload_status = "Success · " + str(processed_count) + " slide(s) processed (" + mode_label + str(last_concepts_count) + " total concepts in lecture)";
+                image_b64 = "";
+                selected_slides = [];
+                if is_replace_initial {
+                    ingestion_mode = "append";
+                }
+                load_overview();
             }
         } except Exception {
-            upload_error = "Could not upload the image. Check the preview output and retry.";
+            upload_error = "Could not upload the images. Check the preview output and retry.";
         }
         uploading = False;
     }
@@ -174,6 +254,13 @@ cl def:pub MemoraDashboard() -> JsxElement {
         load_ai_status(False);
     }
 
+    append_style = styles.modePillActive if ingestion_mode == "append" else styles.modePill;
+    append_text_style = styles.modePillTextActive if ingestion_mode == "append" else styles.modePillText;
+    replace_style = styles.modePillActive if ingestion_mode == "replace" else styles.modePill;
+    replace_text_style = styles.modePillTextActive if ingestion_mode == "replace" else styles.modePillText;
+    has_queued_slides = len(selected_slides) > 1;
+    has_session_slides = session_slides_count > 0;
+
     return <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
         <View style={styles.header}>
             <View style={styles.mark}><Text style={styles.markText}>M</Text></View>
@@ -196,7 +283,7 @@ cl def:pub MemoraDashboard() -> JsxElement {
         </View>
         <View style={styles.card}>
             <Text style={styles.label}>Vision ingestion test</Text>
-            <Text style={styles.title}>Upload a lecture image</Text>
+            <Text style={styles.title}>Upload lecture slide(s)</Text>
             <TextInput
                 accessibilityLabel="Subject name"
                 placeholder="Subject"
@@ -219,12 +306,52 @@ cl def:pub MemoraDashboard() -> JsxElement {
                 multiline={True}
                 style={[styles.input, styles.textArea]}
             />
+
+            <View style={{"gap": 6}}>
+                <Text style={styles.label}>UPLOAD MODE OPTION</Text>
+                <View style={styles.modeRow}>
+                    <Pressable
+                        accessibilityRole="button"
+                        onPress={lambda { ingestion_mode = "append"; }}
+                        style={append_style}
+                    >
+                        <Text style={append_text_style}>➕ Append slides</Text>
+                    </Pressable>
+                    <Pressable
+                        accessibilityRole="button"
+                        onPress={lambda { ingestion_mode = "replace"; }}
+                        style={replace_style}
+                    >
+                        <Text style={replace_text_style}>🔄 Replace lecture</Text>
+                    </Pressable>
+                </View>
+                {ingestion_mode == "append" and <Text style={styles.note}>
+                    Append mode: Multiple slides accumulate new concepts into this lecture without losing prior review history.
+                </Text>}
+                {ingestion_mode == "replace" and <Text style={styles.note}>
+                    Replace mode: Clears previous lecture concepts and starts fresh with newly extracted concepts.
+                </Text>}
+            </View>
+
             <PreviewImagePicker onSelected={image_selected} />
+
+            {has_queued_slides and <View style={styles.badge}>
+                <Text style={styles.badgeText}>
+                    {"📁 " + str(len(selected_slides)) + " slides queued for batch ingestion"}
+                </Text>
+            </View>}
+
+            {has_session_slides and <Text style={styles.label}>
+                {"Slides uploaded this session: " + str(session_slides_count)}
+            </Text>}
+
             <Text accessibilityLiveRegion="polite" style={styles.error if upload_error != "" else styles.note}>
                 {upload_error if upload_error != "" else upload_status}
             </Text>
             <Pressable accessibilityRole="button" disabled={uploading} onPress={upload_lecture_image} style={styles.button}>
-                <Text style={styles.buttonText}>{"Uploading…" if uploading else "Extract image concepts"}</Text>
+                <Text style={styles.buttonText}>
+                    {"Uploading…" if uploading else "Extract image concepts"}
+                </Text>
             </Pressable>
         </View>
         <View style={styles.card}>
