@@ -36,6 +36,22 @@ test "prerequisite edge links between concepts" {
     );
 
     c1 +>:depends_on:+> c2;
-    assert c1.id == "c1";
-    assert c2.id == "c2";
+    prerequisites = [c1->:depends_on:->];
+    assert len(prerequisites) == 1;
+    assert prerequisites[0].id == "c2";
+}
+
+test "subject lecture and concept form the required topology" {
+    subject = SubjectNode(id="s2", name="Networks", code="CS-301");
+    lecture = LectureNode(id="l2", subject_id="s2", title="Subnetting");
+    concept = ConceptNode(
+        id="c3", subject_id="s2", lecture_id="l2", name="CIDR", summary="Prefix notation"
+    );
+
+    subject ++> lecture ++> concept;
+    lectures = [subject-->];
+    concepts = [lecture-->];
+    assert len(lectures) == 1;
+    assert len(concepts) == 1;
+    assert concepts[0].next_review_due == 0.0;
 }

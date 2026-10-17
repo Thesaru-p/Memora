@@ -40,18 +40,26 @@ flowchart TD
 
 ---
 
-## 2. LLM Provider Configuration (OpenRouter)
+## 2. LLM Provider Configuration & Specialized Model Tiering (OpenRouter)
 
-All LLM capabilities are accessed via **OpenRouter** (`https://openrouter.ai/api/v1`) using `OPENROUTER_API_KEY`:
+All LLM capabilities are accessed via **OpenRouter** (`https://openrouter.ai/api/v1`) using `OPENROUTER_API_KEY`. Rather than forcing a single model on all agents, we allocate specialized models matched to each agent's cognitive and latency needs:
 
-1. **Multimodal Vision Model (Slide Photos & Handwritten Notes)**:
+1. **Multimodal Vision & Perception (Lecture Analyzer Agent)**:
    - **Model ID**: `nvidia/nemotron-3.5-super-vl:free`
-   - **Context Window**: 1,000,000 tokens
-   - **Role**: Powers the **Lecture Analyzer Agent** to transcribe handwritten notes, inspect slide diagrams, and extract structured concepts ($0 cost).
-2. **Reasoning & Planning Model (Quiz Generation & Calibration)**:
-   - **Model ID**: `nvidia/nemotron-3-ultra-550b-a55b:free` (with fast fallback to `nvidia/nemotron-3-super:free`)
-   - **Context Window**: 1,000,000 tokens
-   - **Role**: Powers the **Quiz Planner**, **Quiz Generator**, and **Evaluator/Calibration Agents**.
+   - **Specs**: 1,000,000 token context, Vision-Language MoE, 57 t/s throughput, $0 cost.
+   - **Role**: Transcribes handwritten notes, parses slide diagrams and whiteboard photos, extracts atomic concepts.
+2. **Deep Pedagogical Reasoning & Strategy (Quiz Planner & Quiz Generator Agents)**:
+   - **Model ID**: `nvidia/nemotron-3-ultra:free`
+   - **Specs**: 550B MoE frontier reasoning model, 1,000,000 token context.
+   - **Role**: Identifies prerequisite learning bottlenecks, formulates quiz strategy, crafts grounded contextual questions with pedagogical misconception traps.
+3. **Real-Time Semantic Answer Grading (Semantic Evaluator Agent)**:
+   - **Model ID**: `nvidia/nemotron-3-super:free`
+   - **Specs**: 862ms latency, fast semantic evaluation.
+   - **Role**: Evaluates student short answers semantically (accepts synonyms/acronyms, partial credit), diagnoses exact cognitive misconceptions.
+4. **Instant Habit & Motivation Nudges (Coaching Scheduler Agent)**:
+   - **Model ID**: `liquid/lfm-2.5-2.6b:free` *(or `thinkingmachines/inkling-small:free`)*
+   - **Specs**: Ultra-low 273ms latency, 216 tokens/sec throughput.
+   - **Role**: Synthesizes personalized Day-1 review alerts and habit coaching prompts near-instantaneously without user delay.
 
 ---
 
