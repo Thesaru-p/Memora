@@ -218,6 +218,63 @@ walker:pub get_graph_data {
     }
 }
 
+# -------------------------------------------------------------
+# JacHammer Preview / Dev 2 Test Harness
+# -------------------------------------------------------------
+cl {
+    def:pub app() -> JsxElement {
+        has subject_name: str = "Computer Networks";
+        has lecture_title: str = "IP Subnetting & CIDR";
+        has notes_text: str = "CIDR represents an IP network with a slash prefix. A subnet mask identifies network bits. Bitwise AND finds the network address. A default gateway routes traffic outside the local subnet.";
+        has image_b64: str = "";
+        has output: str = "Ready. Ingest sample notes or inspect the graph.";
+        has loading: bool = False;
+
+        async def run_ingestion() -> None {
+            loading = True;
+            result = root spawn ingest_lecture(
+                subject_name=subject_name,
+                lecture_title=lecture_title,
+                notes_text=notes_text,
+                image_b64=image_b64
+            );
+            output = JSON.stringify(result.reports, None, 2);
+            loading = False;
+        }
+
+        async def load_graph() -> None {
+            loading = True;
+            result = root spawn get_graph_data(subject_name=subject_name);
+            output = JSON.stringify(result.reports, None, 2);
+            loading = False;
+        }
+
+        return <main style={{"maxWidth": "900px", "margin": "40px auto", "padding": "0 20px", "fontFamily": "system-ui, sans-serif", "color": "#e8e6e3", "backgroundColor": "#171513"}}>
+            <p style={{"color": "#f2a65a", "letterSpacing": "0.18em"}}>MEMORA · DEV 2 HARNESS</p>
+            <h1 style={{"fontSize": "42px", "marginBottom": "8px"}}>Lecture ingestion & knowledge graph</h1>
+            <p style={{"color": "#aaa39a"}}>Use sample text, paste lecture notes, or paste a base64-encoded slide image. The response below is produced by the real public walkers.</p>
+
+            <section style={{"display": "grid", "gap": "14px", "padding": "22px", "marginTop": "24px", "border": "1px solid #3b3631", "borderRadius": "16px", "backgroundColor": "#211e1b"}}>
+                <label>Subject</label>
+                <input value={subject_name} onChange={lambda (e: ChangeEvent) { subject_name = e.target.value; }} style={{"padding": "12px", "borderRadius": "8px"}} />
+                <label>Lecture title</label>
+                <input value={lecture_title} onChange={lambda (e: ChangeEvent) { lecture_title = e.target.value; }} style={{"padding": "12px", "borderRadius": "8px"}} />
+                <label>Notes / transcript</label>
+                <textarea rows={7} value={notes_text} onChange={lambda (e: ChangeEvent) { notes_text = e.target.value; }} style={{"padding": "12px", "borderRadius": "8px", "fontFamily": "inherit"}} />
+                <label>Slide image base64 (optional)</label>
+                <textarea rows={3} value={image_b64} onChange={lambda (e: ChangeEvent) { image_b64 = e.target.value; }} placeholder="Paste raw base64 or a data:image/... URL" style={{"padding": "12px", "borderRadius": "8px", "fontFamily": "monospace"}} />
+                <div style={{"display": "flex", "gap": "12px", "flexWrap": "wrap"}}>
+                    <button disabled={loading} onClick={run_ingestion} style={{"padding": "12px 18px", "borderRadius": "8px", "cursor": "pointer"}}>{"Working..." if loading else "Ingest lecture"}</button>
+                    <button disabled={loading} onClick={load_graph} style={{"padding": "12px 18px", "borderRadius": "8px", "cursor": "pointer"}}>Load graph data</button>
+                </div>
+            </section>
+
+            <h2 style={{"marginTop": "28px"}}>Walker response</h2>
+            <pre style={{"minHeight": "180px", "padding": "18px", "overflow": "auto", "whiteSpace": "pre-wrap", "border": "1px solid #3b3631", "borderRadius": "12px", "backgroundColor": "#0f0e0d", "color": "#b8e994"}}>{output}</pre>
+        </main>;
+    }
+}
+
 with entry {
     print("==================================================");
     print("Memora - Ebbinghaus Spaced Repetition Multi-Agent System");
