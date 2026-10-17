@@ -4,19 +4,20 @@
 import os;
 import json;
 import urllib.request;
+import dotenv;
 
 # -------------------------------------------------------------
-# 1. Specialized Free Model Mapping (from OpenRouter Dashboard)
+# 1. Specialized Free Model Mapping (Tested & Active Free Models)
 # -------------------------------------------------------------
 
 # Agent 1 (Perception): 1M Context, Vision-Language for slide images & handwritten notes
 glob MODEL_VISION = "nvidia/nemotron-3.5-super-vl:free";
 
-# Agent 2 & 3 (Deep Pedagogical Reasoning & Question Synthesis): 550B MoE frontier reasoning
-glob MODEL_REASONING = "nvidia/nemotron-3-ultra:free";
+# Agent 2 & 3 (Deep Pedagogical Reasoning & Question Synthesis): 120B MoE frontier reasoning
+glob MODEL_REASONING = "nvidia/nemotron-3-super-120b-a12b:free";
 
-# Agent 4 (Semantic Evaluator): Fast 862ms latency for real-time answer grading
-glob MODEL_EVALUATOR = "nvidia/nemotron-3-super:free";
+# Agent 4 (Semantic Evaluator): Fast reasoning for real-time answer grading
+glob MODEL_EVALUATOR = "nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free";
 
 # Agent 5 (Coaching & Scheduler): Ultra-fast 273ms latency, 216 t/s for instant notifications
 glob MODEL_FAST = "liquid/lfm-2.5-2.6b:free";
@@ -25,9 +26,21 @@ glob OPENROUTER_BASE_URL = "https://openrouter.ai/api/v1/chat/completions";
 
 # Queries OpenRouter API with graceful fallback if key is missing or offline.
 def query_openrouter(model: str, system_prompt: str, user_prompt: str, image_b64: str = "") -> str {
+    dotenv.load_dotenv();
     api_key: str = os.environ.get("OPENROUTER_API_KEY", "");
     if not api_key {
         return "";
+    }
+
+    selected_model: str = model;
+    if model == MODEL_VISION and os.environ.get("VISION_MODEL") {
+        selected_model = os.environ.get("VISION_MODEL", model);
+    } elif model == MODEL_REASONING and os.environ.get("REASONING_MODEL") {
+        selected_model = os.environ.get("REASONING_MODEL", model);
+    } elif model == MODEL_EVALUATOR and os.environ.get("EVALUATOR_MODEL") {
+        selected_model = os.environ.get("EVALUATOR_MODEL", model);
+    } elif model == MODEL_FAST and os.environ.get("FAST_MODEL") {
+        selected_model = os.environ.get("FAST_MODEL", model);
     }
 
     try {
@@ -35,7 +48,7 @@ def query_openrouter(model: str, system_prompt: str, user_prompt: str, image_b64
             {"role": "system", "content": system_prompt}
         ];
 
-        if image_b64 and len(image_b64) > 100 {
+        if image_b64 {
             messages.append({
                 "role": "user",
                 "content": [
@@ -51,9 +64,10 @@ def query_openrouter(model: str, system_prompt: str, user_prompt: str, image_b64
         }
 
         req_body = json.dumps({
-            "model": model,
+            "model": selected_model,
             "messages": messages,
-            "temperature": 0.3
+            "temperature": 0.3,
+            "max_tokens": 1024
         }).encode("utf-8");
 
         headers: dict = {
@@ -70,11 +84,19 @@ def query_openrouter(model: str, system_prompt: str, user_prompt: str, image_b64
             method="POST"
         );
 
-        with urllib.request.urlopen(req, timeout=15) as response {
+        with urllib.request.urlopen(req, timeout=25) as response {
             res_data = json.loads(response.read().decode("utf-8"));
             choices = res_data.get("choices", []);
             if choices and len(choices) > 0 {
-                return choices[0].get("message", {}).get("content", "");
+                msg = choices[0].get("message", {});
+                content = msg.get("content", "");
+                if content {
+                    return content;
+                }
+                reasoning = msg.get("reasoning", "");
+                if reasoning {
+                    return reasoning;
+                }
             }
         }
     } except Exception as e {
