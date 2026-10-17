@@ -18,6 +18,7 @@ These rules capture the constraints for the AI Hackathon 2026 Sri Lanka project.
 - Keep non-Jac code minimal and purposeful. If non-Jac code is added, document why it is needed and where it is used.
 - Do not silently copy substantial code, generate hidden pre-event work, or claim that an unavailable integration works.
 - Do not add secrets, API keys, credentials, or private personal information to the repository.
+- Never push to `main` without strict, explicit confirmation from the user immediately before the push. This includes force-pushes and any equivalent command that updates the remote `main` branch.
 - Run relevant checks and tests before reporting completion. Report failures and unverified behavior plainly.
 - Keep the repository demo-ready: simple startup instructions, a reliable entry point, and a focused user flow take priority over speculative features.
 
