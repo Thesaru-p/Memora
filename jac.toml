@@ -4,3 +4,10 @@ kind = "cli"
 
 [run]
 diagnostics = "error"
+
+[jacpack]
+name = 'Memora__1'
+description = 'Jac IDE snapshot for Memora__1'
+
+[jachammer]
+project_id = "prj_57f61de569074e679e0cb094cc0e24da"
