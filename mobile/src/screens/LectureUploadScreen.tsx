@@ -1,174 +1,134 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, ActivityIndicator, Alert } from 'react-native';
+import {
+  ActivityIndicator,
+  Alert,
+  ScrollView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View,
+} from 'react-native';
 import { api } from '../api/client';
+import { AppHeader } from '../components/AppHeader';
+import { colors } from '../theme';
 
 interface Props {
-  onBack: () => void;
   onSuccess: () => void;
 }
 
-export const LectureUploadScreen: React.FC<Props> = ({ onBack, onSuccess }) => {
-  const [subject, setSubject] = useState('Computer Networks');
+const subjects = ['English', 'Mathematics', 'Science', 'History', 'Geography'];
+
+export const LectureUploadScreen: React.FC<Props> = ({ onSuccess }) => {
+  const [subject, setSubject] = useState('Science');
+  const [subjectMenuOpen, setSubjectMenuOpen] = useState(false);
   const [title, setTitle] = useState('');
   const [notes, setNotes] = useState('');
-  const [uploadMode, setUploadMode] = useState<'append' | 'replace'>('append');
-  const [slideCount, setSlideCount] = useState<number>(0);
   const [loading, setLoading] = useState(false);
   const [pipelineStage, setPipelineStage] = useState('');
 
   const handleUpload = async () => {
-    if (!title.trim()) {
-      Alert.alert('Required', 'Please enter a lecture title.');
+    if (!title.trim() || !notes.trim()) {
+      Alert.alert('Add your material', 'Enter a material title and paste the lecture notes first.');
       return;
     }
 
     setLoading(true);
-    setPipelineStage('1/3 Extracting atomic concepts with Nemotron 3.5 Super VL...');
-
-    setTimeout(() => {
-      setPipelineStage('2/3 Building Object-Spatial Knowledge Graph in Jac...');
-    }, 1200);
-
-    setTimeout(() => {
-      setPipelineStage('3/3 Calculating Ebbinghaus stability & scheduling Day-1 quiz...');
-    }, 2200);
-
+    setPipelineStage('Extracting concepts and building your learning graph…');
     try {
-      const res: any = await api.ingestLecture(subject, title, notes, {
-        replaceExisting: uploadMode === 'replace',
-      });
-      setLoading(false);
-      const totalConcepts = res?.total_lecture_concepts ?? res?.total_concepts ?? 4;
-      const modeText = uploadMode === 'replace' ? 'Replaced' : 'Accumulated';
+      const result: any = await api.ingestLecture(subject, title, notes);
+      const count = result?.total_lecture_concepts ?? result?.total_concepts ?? 0;
       Alert.alert(
-        'Lecture Knowledge Graph Built! 🚀',
-        `${modeText} lecture graph now has ${totalConcepts} core concepts linked. Your Day-1 micro-quiz is scheduled for tomorrow!`,
-        [{ text: 'View Dashboard', onPress: onSuccess }]
+        'Material ready',
+        `${count} concepts were added. Your first review is scheduled in 24 hours.`,
+        [{ text: 'View home', onPress: onSuccess }]
       );
-    } catch (e) {
+    } catch (error) {
+      Alert.alert('Could not process material', error instanceof Error ? error.message : 'Try again shortly.');
+    } finally {
       setLoading(false);
-      Alert.alert('Upload Error', 'Could not process notes at this moment.');
+      setPipelineStage('');
     }
   };
 
+  const explainImageSupport = () => {
+    Alert.alert('Image upload', 'Paste OCR text below for now. Native camera and gallery access will be connected with the mobile build.');
+  };
+
   return (
-    <ScrollView style={styles.container}>
-      <TouchableOpacity style={styles.backBtn} onPress={onBack}>
-        <Text style={styles.backBtnText}>← Back</Text>
+    <ScrollView style={styles.container} contentContainerStyle={styles.content} keyboardShouldPersistTaps="handled">
+      <AppHeader />
+      <Text style={styles.pageTitle}>Material</Text>
+      <Text style={styles.label}>Subject</Text>
+      <TouchableOpacity style={styles.select} onPress={() => setSubjectMenuOpen((open) => !open)}>
+        <Text style={styles.selectText}>{subject}</Text>
+        <Text style={styles.selectArrow}>{subjectMenuOpen ? '⌃' : '⌄'}</Text>
+      </TouchableOpacity>
+      {subjectMenuOpen ? (
+        <View style={styles.subjectMenu}>
+          {subjects.map((item) => (
+            <TouchableOpacity
+              key={item}
+              style={[styles.subjectOption, item === subject && styles.subjectOptionActive]}
+              onPress={() => {
+                setSubject(item);
+                setSubjectMenuOpen(false);
+              }}
+            >
+              <Text style={styles.subjectOptionText}>{item}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+      ) : null}
+
+      <Text style={styles.helper}>Turn your study material into a connected learning graph.</Text>
+      <TouchableOpacity style={styles.uploadArea} onPress={explainImageSupport}>
+        <Text style={styles.uploadIcon}>▣＋</Text>
+        <Text style={styles.uploadTitle}>Click here to upload</Text>
+        <Text style={styles.uploadHint}>Slides and handwritten notes</Text>
       </TouchableOpacity>
 
-      <Text style={styles.pageTitle}>Ingest Lecture Material</Text>
-      <Text style={styles.pageSubtitle}>Upload slides, photos of notes, or paste lecture text.</Text>
-
-      {/* Input Form */}
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>COURSE MODULE</Text>
-        <TextInput style={styles.input} value={subject} onChangeText={setSubject} placeholderTextColor="#64748B" />
-      </View>
-
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>LECTURE TOPIC / TITLE</Text>
-        <TextInput
-          style={styles.input}
-          placeholder="e.g. Virtual Memory & Page Replacement"
-          placeholderTextColor="#64748B"
-          value={title}
-          onChangeText={setTitle}
-        />
-      </View>
-
-      {/* Ingestion Mode Option */}
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>UPLOAD MODE OPTION</Text>
-        <View style={styles.modeRow}>
-          <TouchableOpacity
-            style={[styles.modePill, uploadMode === 'append' && styles.modePillActive]}
-            onPress={() => setUploadMode('append')}
-          >
-            <Text style={[styles.modePillText, uploadMode === 'append' && styles.modePillTextActive]}>
-              ➕ Append Slides
-            </Text>
-          </TouchableOpacity>
-          <TouchableOpacity
-            style={[styles.modePill, uploadMode === 'replace' && styles.modePillActive]}
-            onPress={() => setUploadMode('replace')}
-          >
-            <Text style={[styles.modePillText, uploadMode === 'replace' && styles.modePillTextActive]}>
-              🔄 Replace Lecture
-            </Text>
-          </TouchableOpacity>
-        </View>
-        <Text style={styles.hintText}>
-          {uploadMode === 'append'
-            ? 'Append mode: Multiple slides accumulate concepts without losing prior reviews.'
-            : 'Replace mode: Clears previous lecture concepts and starts fresh.'}
-        </Text>
-      </View>
-
-      {/* Multimodal Action Pills */}
-      <View style={styles.actionRow}>
-        <TouchableOpacity
-          style={styles.mediaPill}
-          onPress={() => {
-            const nextCount = slideCount + 1;
-            setSlideCount(nextCount);
-            if (!title) {
-              setTitle('TCP 3-Way Handshake & Flow Control');
-            }
-            const slideNote = `[Slide ${nextCount}] SYN -> SYN-ACK -> ACK sequence, sliding window protocol, flow control.`;
-            setNotes(prev => (prev ? `${prev}\n\n${slideNote}` : slideNote));
-            Alert.alert('Slide Photo Attached', `Captured slide photo #${nextCount}.`);
-          }}
-        >
-          <Text style={styles.mediaPillText}>
-            {slideCount > 0 ? `📷 Add Slide #${slideCount + 1}` : '📷 Take Slide Photo'}
-          </Text>
+      <Text style={styles.sectionTitle}>Add more material</Text>
+      <View style={styles.sourceRow}>
+        <TouchableOpacity style={styles.sourceCard} onPress={explainImageSupport}>
+          <Text style={styles.sourceIcon}>▣</Text>
+          <Text style={styles.sourceTitle}>Camera</Text>
+          <Text style={styles.sourceHint}>Capture your notes</Text>
         </TouchableOpacity>
-
-        <TouchableOpacity
-          style={styles.mediaPill}
-          onPress={() => {
-            setTitle('CIDR & Subnet Mask Calculations');
-            setNotes('Handwritten notes: /28 gives 16 IP addresses (14 usable). Subnet mask: 255.255.255.240. Bitwise ANDing separates Network ID.');
-            Alert.alert('Handwritten Note', 'Attached image of handwritten lecture page.');
-          }}
-        >
-          <Text style={styles.mediaPillText}>✍️ Handwritten Note</Text>
+        <TouchableOpacity style={styles.sourceCard} onPress={explainImageSupport}>
+          <Text style={styles.sourceIcon}>▧</Text>
+          <Text style={styles.sourceTitle}>Image</Text>
+          <Text style={styles.sourceHint}>Choose from gallery</Text>
         </TouchableOpacity>
       </View>
 
-      {slideCount > 0 && (
-        <View style={styles.slideCounterRow}>
-          <Text style={styles.slideCounterText}>📁 {slideCount} slide photos attached</Text>
-          <TouchableOpacity onPress={() => { setSlideCount(0); setNotes(''); }}>
-            <Text style={styles.clearBtnText}>Clear</Text>
-          </TouchableOpacity>
-        </View>
-      )}
+      <Text style={styles.label}>Material title</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="e.g. Photosynthesis"
+        placeholderTextColor="#91A0AA"
+        value={title}
+        onChangeText={setTitle}
+      />
+      <Text style={styles.label}>Lecture notes or transcript</Text>
+      <TextInput
+        style={[styles.input, styles.textArea]}
+        placeholder="Paste the lecture notes or OCR text…"
+        placeholderTextColor="#91A0AA"
+        multiline
+        value={notes}
+        onChangeText={setNotes}
+      />
 
-      <View style={styles.inputGroup}>
-        <Text style={styles.label}>LECTURE NOTES / TRANSCRIPT</Text>
-        <TextInput
-          style={[styles.input, styles.textArea]}
-          placeholder="Paste lecture summary, key formulas, or OCR text..."
-          placeholderTextColor="#64748B"
-          multiline
-          numberOfLines={8}
-          value={notes}
-          onChangeText={setNotes}
-        />
-      </View>
-
+      <Text style={styles.privacy}>✧ Your source is transformed into concepts and prerequisite links.</Text>
       {loading ? (
         <View style={styles.loadingBox}>
-          <ActivityIndicator size="large" color="#6366F1" />
+          <ActivityIndicator color={colors.primaryDark} />
           <Text style={styles.loadingText}>{pipelineStage}</Text>
         </View>
       ) : (
-        <TouchableOpacity style={styles.submitBtn} onPress={handleUpload}>
-          <Text style={styles.submitBtnText}>
-            {slideCount > 1 ? `Build Graph (${slideCount} Slides)` : 'Build Knowledge Graph'}
-          </Text>
+        <TouchableOpacity style={styles.submitButton} onPress={handleUpload}>
+          <Text style={styles.submitButtonText}>Build learning graph</Text>
         </TouchableOpacity>
       )}
     </ScrollView>
@@ -176,29 +136,33 @@ export const LectureUploadScreen: React.FC<Props> = ({ onBack, onSuccess }) => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#0B0F19', padding: 16 },
-  backBtn: { marginTop: 24, marginBottom: 12 },
-  backBtnText: { color: '#818CF8', fontSize: 16, fontWeight: '700' },
-  pageTitle: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },
-  pageSubtitle: { fontSize: 13, color: '#94A3B8', marginTop: 4, marginBottom: 20 },
-  inputGroup: { marginBottom: 16 },
-  label: { fontSize: 11, fontWeight: '800', color: '#94A3B8', letterSpacing: 1, marginBottom: 6 },
-  input: { backgroundColor: '#1E293B', borderRadius: 10, padding: 14, color: '#FFFFFF', fontSize: 15, borderWidth: 1, borderColor: '#334155' },
-  textArea: { height: 140, textAlignVertical: 'top' },
-  modeRow: { flexDirection: 'row', gap: 10, marginBottom: 6 },
-  modePill: { flex: 1, paddingVertical: 10, paddingHorizontal: 12, borderRadius: 10, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', alignItems: 'center' },
-  modePillActive: { backgroundColor: '#6366F1', borderColor: '#818CF8' },
-  modePillText: { color: '#94A3B8', fontSize: 13, fontWeight: '600' },
-  modePillTextActive: { color: '#FFFFFF', fontWeight: '800' },
-  hintText: { color: '#94A3B8', fontSize: 12, lineHeight: 18, marginTop: 4 },
-  slideCounterRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#1E293B', padding: 10, borderRadius: 8, marginBottom: 16 },
-  slideCounterText: { color: '#818CF8', fontSize: 13, fontWeight: '700' },
-  clearBtnText: { color: '#EF4444', fontSize: 12, fontWeight: '700' },
-  actionRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 16 },
-  mediaPill: { backgroundColor: '#1E1B4B', paddingVertical: 10, paddingHorizontal: 14, borderRadius: 20, borderWidth: 1, borderColor: '#6366F1', width: '48%', alignItems: 'center' },
-  mediaPillText: { color: '#C7D2FE', fontSize: 12, fontWeight: '700' },
-  submitBtn: { backgroundColor: '#6366F1', paddingVertical: 14, borderRadius: 12, alignItems: 'center', marginTop: 8, marginBottom: 40 },
-  submitBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 16 },
-  loadingBox: { backgroundColor: '#1E293B', borderRadius: 12, padding: 20, alignItems: 'center', marginVertical: 16 },
-  loadingText: { color: '#C7D2FE', fontSize: 13, fontWeight: '600', marginTop: 12, textAlign: 'center' },
+  container: { flex: 1, backgroundColor: colors.background },
+  content: { padding: 16, paddingBottom: 28 },
+  pageTitle: { color: colors.text, fontSize: 24, fontWeight: '800', marginBottom: 10 },
+  label: { color: colors.text, fontSize: 11, fontWeight: '700', marginBottom: 6, marginTop: 8 },
+  select: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', width: '58%', backgroundColor: colors.surfaceBlue, borderWidth: 1, borderColor: colors.primary, borderRadius: 10, paddingHorizontal: 12, paddingVertical: 10 },
+  selectText: { color: colors.text, fontSize: 13, fontWeight: '600' },
+  selectArrow: { color: colors.primaryDark, fontSize: 16 },
+  subjectMenu: { width: '58%', backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 10, padding: 5, marginTop: 4 },
+  subjectOption: { paddingHorizontal: 10, paddingVertical: 9, borderRadius: 7 },
+  subjectOptionActive: { backgroundColor: colors.surfaceBlueStrong },
+  subjectOptionText: { color: colors.text, fontSize: 12 },
+  helper: { color: colors.muted, fontSize: 12, lineHeight: 18, marginVertical: 12 },
+  uploadArea: { height: 130, backgroundColor: colors.surfaceBlueStrong, borderRadius: 18, alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  uploadIcon: { color: colors.primary, fontSize: 32, fontWeight: '700' },
+  uploadTitle: { color: colors.primaryDark, fontSize: 15, fontWeight: '700', marginTop: 6 },
+  uploadHint: { color: colors.muted, fontSize: 10, marginTop: 3 },
+  sectionTitle: { color: colors.text, fontSize: 13, fontWeight: '800', marginBottom: 8 },
+  sourceRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  sourceCard: { flex: 1, backgroundColor: colors.surfaceBlueStrong, borderRadius: 15, padding: 14, minHeight: 92 },
+  sourceIcon: { color: colors.primaryDark, fontSize: 20 },
+  sourceTitle: { color: colors.text, fontSize: 13, fontWeight: '800', marginTop: 7 },
+  sourceHint: { color: colors.muted, fontSize: 10, marginTop: 2 },
+  input: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 11, color: colors.text, fontSize: 14, paddingHorizontal: 13, paddingVertical: 11, marginBottom: 8 },
+  textArea: { minHeight: 120, textAlignVertical: 'top' },
+  privacy: { color: colors.muted, fontSize: 10, lineHeight: 15, marginVertical: 10 },
+  submitButton: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 14, alignItems: 'center', marginTop: 4 },
+  submitButtonText: { color: colors.text, fontSize: 14, fontWeight: '800' },
+  loadingBox: { flexDirection: 'row', alignItems: 'center', backgroundColor: colors.surfaceBlue, borderRadius: 12, padding: 14 },
+  loadingText: { flex: 1, color: colors.text, fontSize: 12, marginLeft: 10 },
 });
