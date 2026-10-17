@@ -1,0 +1,8 @@
+{
+  "name": "memora-dev-harness",
+  "private": true,
+  "scripts": {
+    "dev": "node dev-ui/server.mjs",
+    "start": "node dev-ui/server.mjs"
+  }
+}
