@@ -5,7 +5,7 @@ kind = "cli"
 [client]
 
 [dependencies]
-byllm = ">=0.6.19"
+byllm = "0.6.19"
 
 [run]
 diagnostics = "error"
