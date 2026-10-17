@@ -1,8 +1,5 @@
-import from "@hugeicons/react" { HugeiconsIcon }
-import from "@hugeicons/core-free-icons" { DashboardSquare01Icon, Analytics01Icon, Clock01Icon, CheckmarkCircle02Icon }
 import from .ui.card { Card, CardHeader, CardTitle, CardDescription, CardContent }
 import from .ui.badge { Badge }
-import from .ui.progress { Progress }
 
 sv import from ..main { get_dashboard }
 
@@ -12,6 +9,7 @@ def:pub MemoraDashboard() -> JsxElement {
         topic_text: str = "Loading",
         due_text: str = "Checking your schedule",
         streak_text: str = "—",
+        retention_width: str = "0%",
         loading: bool = True,
         error_message: str = "";
 
@@ -22,7 +20,9 @@ def:pub MemoraDashboard() -> JsxElement {
             result = root spawn get_dashboard(subject_name="Computer Networks");
             if result.reports and len(result.reports) > 0 {
                 data = result.reports[0];
-                retention_text = str(data["overall_retention_pct"]) + "%";
+                retention = data["overall_retention_pct"] as float;
+                retention_text = str(retention) + "%";
+                retention_width = str(retention) + "%";
                 concepts_text = str(data["active_concepts_count"]);
                 topic_text = str(data["next_quiz_topic"]);
                 due_text = "Due in " + str(data["next_quiz_due_in_hours"]) + " hours";
@@ -38,46 +38,52 @@ def:pub MemoraDashboard() -> JsxElement {
 
     can with entry { load_overview(); }
 
-    return <main className="min-h-screen bg-muted/40 px-4 py-8 sm:px-8">
-        <div className="mx-auto flex w-full max-w-6xl flex-col gap-8">
-            <header className="flex flex-wrap items-center justify-between gap-4">
-                <div className="flex items-center gap-3">
-                    <div className="flex size-11 items-center justify-center rounded-xl bg-primary text-primary-foreground shadow-sm"><HugeiconsIcon icon={DashboardSquare01Icon} strokeWidth={2} className="size-5" /></div>
-                    <div><p className="text-sm font-medium text-muted-foreground">Memora · Learning dashboard</p><h1 className="text-2xl font-semibold tracking-tight">Computer Networks</h1></div>
+    return <main className="dashboard-page">
+        <div className="dashboard-wrap">
+            <header className="dashboard-header">
+                <div className="dashboard-brand">
+                    <div className="dashboard-mark">M</div>
+                    <div><p className="dashboard-eyebrow">Memora · Learning dashboard</p><h1 className="dashboard-heading">Computer Networks</h1></div>
                 </div>
                 <Badge variant="secondary">CS-301</Badge>
             </header>
-            <section className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                <Card className="shadow-sm">
-                    <CardHeader className="flex flex-row items-start justify-between gap-4">
-                        <div><CardDescription>Retention health</CardDescription><CardTitle className="mt-2 text-3xl tabular-nums">{retention_text}</CardTitle></div>
-                        <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><HugeiconsIcon icon={Analytics01Icon} strokeWidth={2} className="size-4" /></div>
+            <section className="dashboard-stats">
+                <Card className="dashboard-card">
+                    <CardHeader className="dashboard-card-head">
+                        <div><CardDescription className="dashboard-label">Retention health</CardDescription><CardTitle className="dashboard-value">{retention_text}</CardTitle></div>
+                        <div className="dashboard-chip">R</div>
                     </CardHeader>
-                    <CardContent><Progress value={0} /><p className="mt-3 text-sm text-muted-foreground">Keep concepts fresh with a short review.</p></CardContent>
+                    <CardContent>
+                        <div className="dashboard-progress"><div className="dashboard-progress-fill" style={{"width": retention_width}} /></div>
+                        <p className="dashboard-note">Keep concepts fresh with a short review.</p>
+                    </CardContent>
                 </Card>
-                <Card className="shadow-sm">
-                    <CardHeader className="flex flex-row items-start justify-between gap-4">
-                        <div><CardDescription>Concepts in rotation</CardDescription><CardTitle className="mt-2 text-3xl tabular-nums">{concepts_text}</CardTitle></div>
-                        <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><HugeiconsIcon icon={CheckmarkCircle02Icon} strokeWidth={2} className="size-4" /></div>
+                <Card className="dashboard-card">
+                    <CardHeader className="dashboard-card-head">
+                        <div><CardDescription className="dashboard-label">Concepts in rotation</CardDescription><CardTitle className="dashboard-value">{concepts_text}</CardTitle></div>
+                        <div className="dashboard-chip">C</div>
                     </CardHeader>
-                    <CardContent><p className="text-sm text-muted-foreground">Topics tracked for your next review.</p></CardContent>
+                    <CardContent><p className="dashboard-note">Topics tracked for your next review.</p></CardContent>
                 </Card>
-                <Card className="shadow-sm sm:col-span-2 lg:col-span-1">
-                    <CardHeader className="flex flex-row items-start justify-between gap-4">
-                        <div><CardDescription>Next review</CardDescription><CardTitle className="mt-2 text-xl">{topic_text}</CardTitle></div>
-                        <div className="flex size-9 items-center justify-center rounded-lg bg-primary/10 text-primary"><HugeiconsIcon icon={Clock01Icon} strokeWidth={2} className="size-4" /></div>
+                <Card className="dashboard-card">
+                    <CardHeader className="dashboard-card-head">
+                        <div><CardDescription className="dashboard-label">Next review</CardDescription><CardTitle className="dashboard-value dashboard-topic">{topic_text}</CardTitle></div>
+                        <div className="dashboard-chip">N</div>
                     </CardHeader>
-                    <CardContent><p className="text-sm text-muted-foreground">{due_text}</p></CardContent>
+                    <CardContent><p className="dashboard-note">{due_text}</p></CardContent>
                 </Card>
             </section>
-            <Card className="shadow-sm">
-                <CardHeader><CardTitle>Your learning rhythm</CardTitle><CardDescription>A little active recall helps strengthen what you learned.</CardDescription></CardHeader>
+            <Card className="dashboard-card">
+                <CardHeader>
+                    <CardTitle className="dashboard-lower-title">Your learning rhythm</CardTitle>
+                    <CardDescription className="dashboard-lower-description">A little active recall helps strengthen what you learned.</CardDescription>
+                </CardHeader>
                 <CardContent>
-                    {loading and <p className="py-6 text-sm text-muted-foreground">Loading your learning overview…</p>}
-                    {not loading and error_message != "" and <p className="py-6 text-sm text-destructive">{error_message} Refresh the page to try again.</p>}
-                    {not loading and error_message == "" and <div className="flex flex-wrap items-center justify-between gap-4 rounded-xl border bg-background p-5">
-                        <div><p className="font-medium">Study streak</p><p className="text-sm text-muted-foreground">Small reviews build lasting recall.</p></div>
-                        <p className="text-3xl font-semibold tabular-nums">{streak_text} <span className="text-base font-normal text-muted-foreground">days</span></p>
+                    {loading and <p className="dashboard-note">Loading your learning overview…</p>}
+                    {not loading and error_message != "" and <p className="dashboard-error">{error_message} Refresh the page to try again.</p>}
+                    {not loading and error_message == "" and <div className="dashboard-streak">
+                        <div><p className="dashboard-label">Study streak</p><p className="dashboard-note">Small reviews build lasting recall.</p></div>
+                        <p className="dashboard-streak-value">{streak_text} <span className="dashboard-streak-unit">days</span></p>
                     </div>}
                 </CardContent>
             </Card>

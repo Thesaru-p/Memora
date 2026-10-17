@@ -17,7 +17,7 @@ import from backend.agents.scheduler { get_notifications }
 import from backend.agents.analytics { get_analytics }
 import from .components.MemoraDashboard { MemoraDashboard }
 
-import ".styles.global.css";
+import "./styles/global.css";
 import from "@jac/runtime" { Router, Routes, Route }
 
 def:pub app() -> JsxElement {
@@ -85,7 +85,7 @@ walker:pub get_dashboard {
             "study_streak_days": 3,
             "next_quiz_due_in_hours": 18,
             "next_quiz_topic": "Subnet Masks & ANDing",
-            "pending_quiz_available": true
+            "pending_quiz_available": True
         };
     }
 }

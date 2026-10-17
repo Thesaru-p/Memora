@@ -46,6 +46,6 @@ description = 'Jac IDE snapshot for Memora_3'
 [jachammer]
 project_id = "prj_d93dd8ada4154961b1f3137818c4741f"
 
-[client.vite]
+[plugins.client.vite]
 plugins = ["tailwindcss()"]
 lib_imports = ["import tailwindcss from '@tailwindcss/vite'"]
