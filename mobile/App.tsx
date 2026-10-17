@@ -1,5 +1,5 @@
-import React, { useState } from 'react';
-import { SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { Platform, SafeAreaView, StatusBar, StyleSheet, View } from 'react-native';
 import { DashboardScreen } from './src/screens/DashboardScreen';
 import { LectureUploadScreen } from './src/screens/LectureUploadScreen';
 import { QuizScreen } from './src/screens/QuizScreen';
@@ -7,6 +7,8 @@ import { QuizResultsScreen } from './src/screens/QuizResultsScreen';
 import { AnalyticsScreen } from './src/screens/AnalyticsScreen';
 import { KnowledgeGraphScreen } from './src/screens/KnowledgeGraphScreen';
 import { QuizEvaluationResult } from './src/types';
+import { BottomNav, PrimaryScreen } from './src/components/BottomNav';
+import { colors } from './src/theme';
 
 type Screen = 'DASHBOARD' | 'UPLOAD' | 'QUIZ' | 'RESULTS' | 'ANALYTICS' | 'GRAPH';
 
@@ -19,9 +21,23 @@ export default function App() {
     setCurrentScreen('RESULTS');
   };
 
+  const primaryScreen: PrimaryScreen | null =
+    currentScreen === 'DASHBOARD' ||
+    currentScreen === 'UPLOAD' ||
+    currentScreen === 'ANALYTICS' ||
+    currentScreen === 'GRAPH'
+      ? currentScreen
+      : null;
+
+  useEffect(() => {
+    if (Platform.OS === 'web') {
+      window.scrollTo(0, 0);
+    }
+  }, [currentScreen]);
+
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="light-content" backgroundColor="#0B0F19" />
+      <StatusBar barStyle="dark-content" backgroundColor={colors.background} />
       <View style={styles.container}>
         {currentScreen === 'DASHBOARD' && (
           <DashboardScreen
@@ -34,7 +50,6 @@ export default function App() {
 
         {currentScreen === 'UPLOAD' && (
           <LectureUploadScreen
-            onBack={() => setCurrentScreen('DASHBOARD')}
             onSuccess={() => setCurrentScreen('DASHBOARD')}
           />
         )}
@@ -55,11 +70,15 @@ export default function App() {
         )}
 
         {currentScreen === 'ANALYTICS' && (
-          <AnalyticsScreen onBack={() => setCurrentScreen('DASHBOARD')} />
+          <AnalyticsScreen />
         )}
 
         {currentScreen === 'GRAPH' && (
-          <KnowledgeGraphScreen onBack={() => setCurrentScreen('DASHBOARD')} />
+          <KnowledgeGraphScreen />
+        )}
+
+        {primaryScreen && (
+          <BottomNav current={primaryScreen} onSelect={(screen) => setCurrentScreen(screen)} />
         )}
       </View>
     </SafeAreaView>
@@ -69,10 +88,10 @@ export default function App() {
 const styles = StyleSheet.create({
   safeArea: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: colors.background,
   },
   container: {
     flex: 1,
-    backgroundColor: '#0B0F19',
+    backgroundColor: colors.background,
   },
 });

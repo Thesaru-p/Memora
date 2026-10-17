@@ -60,6 +60,7 @@ node QuestionNode {
     has concept_name: str;
     has prompt: str;
     has correct_answer: str;
+    has options: list[str] = [];
     has question_type: str = "MCQ";      # MCQ | ACTIVE_RECALL
     has explanation: str = "";           # Pedagogical misconception explanation
     has student_answer: str = "";

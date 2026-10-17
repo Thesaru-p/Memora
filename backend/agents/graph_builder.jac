@@ -10,19 +10,31 @@ walker build_lecture_graph {
     has lecture_title: str;
     has raw_notes: str;
     has concepts: list[RawExtractedConcept];
+    has subject_code: str = "";
+    has replace_existing: bool = False;
     has created_nodes_count: int = 0;
+    has total_lecture_concepts: int = 0;
+    has result: dict = {};
 
     can construct with Root entry {
         now: float = time.time();
         clean_subject: str = self.subject_name.strip();
         clean_title: str = self.lecture_title.strip();
         subject_id: str = f"subj_{clean_subject.lower().replace(' ', '_')}";
+        generated_code: str = "";
+        for word in clean_subject.split() {
+            generated_code = f"{generated_code}{word[0].upper()}";
+        }
+        if not generated_code {
+            generated_code = "SUBJ";
+        }
+        clean_code: str = self.subject_code.strip() if self.subject_code.strip() else f"{generated_code}-001";
 
         # 1. Find and reuse existing Subject Node by subject_id, or create if not present
         subject = SubjectNode(
             id=subject_id,
             name=clean_subject,
-            code="CS-301",
+            code=clean_code,
             description=f"Course module for {clean_subject}",
             created_at=now
         );
@@ -54,6 +66,19 @@ walker build_lecture_graph {
                 lecture = child;
                 found_lecture = True;
                 break;
+            }
+        }
+
+        if found_lecture and self.replace_existing {
+            # Clear previous concept nodes under this lecture for a fresh replace
+            old_concepts: list[ConceptNode] = [];
+            for child in [lecture-->] {
+                if isinstance(child, ConceptNode) {
+                    old_concepts.append(child);
+                }
+            }
+            for old_c in old_concepts {
+                del old_c;
             }
         }
 
@@ -206,12 +231,16 @@ walker build_lecture_graph {
             }
         }
         lecture.concept_count = total_concepts;
+        self.total_lecture_concepts = total_concepts;
 
-        report {
+        self.result = {
             "status": "success",
             "subject_id": subject.id,
             "lecture_id": lecture_id,
-            "nodes_created": self.created_nodes_count
+            "nodes_created": self.created_nodes_count,
+            "total_lecture_concepts": total_concepts,
+            "mode": "replace" if self.replace_existing else "append"
         };
+        report self.result;
     }
 }
