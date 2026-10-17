@@ -1,0 +1,6 @@
+[project]
+name = "memora"
+kind = "cli"
+
+[run]
+diagnostics = "error"
