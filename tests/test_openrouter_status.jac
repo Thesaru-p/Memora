@@ -117,12 +117,13 @@ test "structured extraction requests JSON with the requested output budget" {
     with patch.object(config.dotenv, "load_dotenv") {
         with (patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-only-key"}) as AbstractContextManager) {
             with patch.object(config, "urlopen", return_value=response) as send {
-                content = config.query_openrouter(config.MODEL_VISION, "system", "user", "", True, 4096);
+                content = config.query_openrouter(config.MODEL_VISION, "system", "user", "data:image/png;base64,cGl4ZWw=", True, 4096);
                 request = send.call_args[0][0];
                 payload = json.loads(str(request.data.decode("utf-8")));
                 assert content == "{\"concepts\": []}";
                 assert payload["response_format"] == {"type": "json_object"};
                 assert payload["max_tokens"] == 4096;
+                assert payload["messages"][1]["content"][1]["image_url"]["url"] == "data:image/png;base64,cGl4ZWw=";
             }
         }
     }

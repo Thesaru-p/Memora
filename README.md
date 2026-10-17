@@ -134,5 +134,10 @@ or missing final answer. Lecture ingestion separately requires a valid structure
 response containing 4-8 concepts. If extraction fails, the endpoint returns an
 error and writes no lecture or concept nodes; it never substitutes demo concepts.
 
+For temporary JacHammer testing, the mobile preview includes a **Vision ingestion
+test** card. Enter a subject and lecture title, choose a JPG, PNG, or WebP image up
+to 5 MB, and tap **Extract image concepts**. The browser converts the selected
+image to base64 and calls `ingest_lecture`; no JacHammer CLI is required.
+
 Run the offline diagnostic tests with `jac test tests/test_openrouter_status.jac`
 and `jac test tests/test_lecture_analyzer.jac`.

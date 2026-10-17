@@ -79,13 +79,14 @@ def request_openrouter(
         ];
 
         if image_b64 {
+            image_url = image_b64 if image_b64.startswith("data:image/") else f"data:image/jpeg;base64,{image_b64}";
             messages.append({
                 "role": "user",
                 "content": [
                     {"type": "text", "text": user_prompt},
                     {
                         "type": "image_url",
-                        "image_url": {"url": f"data:image/jpeg;base64,{image_b64}"}
+                        "image_url": {"url": image_url}
                     }
                 ]
             });
