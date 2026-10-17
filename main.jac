@@ -17,11 +17,8 @@ import from backend.agents.scheduler { get_notifications }
 import from backend.agents.analytics { get_analytics }
 import from .components.MemoraDashboard { MemoraDashboard }
 
-import "./styles/global.css";
-import from "@jac/runtime" { Router, Routes, Route }
-
 def:pub app() -> JsxElement {
-    return <Router><Routes><Route path="/" element={<MemoraDashboard />} /></Routes></Router>;
+    return <MemoraDashboard />;
 }
 
 # -------------------------------------------------------------

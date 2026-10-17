@@ -74,6 +74,20 @@ jac test tests/test_graph.jac
 ```
 
 ### 3. Mobile App Setup (Dev 1)
+
+The JacHammer entry point is a Jac mobUI mobile dashboard (`client_kind = "mobui"`
+in `jac.toml`). It uses native-compatible components and a phone-width layout;
+JacHammer can render the same components in its browser preview.
+To run this Jac UI on a device with a current Jac runtime:
+
+```bash
+jac setup react-native
+jac start main.jac --client react-native --dev
+```
+
+Android/iOS builds require their native development tools. The separate Expo
+client below remains owned by Dev 1.
+
 ```bash
 cd mobile
 npm install
