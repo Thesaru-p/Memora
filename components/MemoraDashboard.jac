@@ -1,7 +1,7 @@
 cl import from "@jac/mobui" { View, Text, TextInput, ScrollView, Pressable, StyleSheet }
 cl import from .preview_image_picker { PreviewImagePicker }
 
-sv import from ..main { get_dashboard, get_openrouter_status, ingest_lecture }
+sv import from main { get_dashboard, get_openrouter_status, ingest_lecture }
 
 cl glob styles = StyleSheet.create({
     "screen": {"flex": 1, "backgroundColor": "#f4f6f5"},
@@ -93,6 +93,7 @@ cl def:pub MemoraDashboard() -> JsxElement {
                 if str(data["status"]) == "success" {
                     upload_status = "Success · " + str(data["total_concepts"]) + " concepts extracted from " + image_name;
                     image_b64 = "";
+                    load_overview();
                 } else {
                     upload_error = str(data["error"]);
                     upload_status = "Extraction failed.";
@@ -148,7 +149,8 @@ cl def:pub MemoraDashboard() -> JsxElement {
         loading = True;
         error_message = "";
         try {
-            result = root spawn get_dashboard(subject_name="Computer Networks");
+            sub_name = upload_subject if upload_subject.strip() else "Computer Networks";
+            result = root spawn get_dashboard(subject_name=sub_name);
             if result.reports and len(result.reports) > 0 {
                 data = result.reports[0];
                 retention = data["overall_retention_pct"] as float;
