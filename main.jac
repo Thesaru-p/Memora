@@ -1,10 +1,16 @@
 # Memora - Main Entrypoint & Public Walker Endpoints
 # Exposes clean REST APIs for the React Native Mobile App and JacHammer Cloud.
 
+import base64;
 import time;
+import from byllm.lib { Image }
 import from backend.graph { SubjectNode, LectureNode, ConceptNode, QuizNode, QuestionNode, depends_on }
 import from backend.ebbinghaus { calc_retrievability, classify_retention_status }
-import from backend.agents.lecture_analyzer { extract_concepts_from_text, RawExtractedConcept }
+import from backend.agents.lecture_analyzer {
+    extract_concepts_from_image,
+    extract_concepts_from_text,
+    RawExtractedConcept
+}
 import from backend.agents.graph_builder { build_lecture_graph }
 import from backend.agents.quiz_planner { plan_quiz }
 import from backend.agents.quiz_generator { generate_micro_quiz_items, GeneratedQuestion }
@@ -19,10 +25,21 @@ walker:pub ingest_lecture {
     has subject_name: str = "Computer Networks";
     has lecture_title: str = "IP Subnetting & CIDR";
     has notes_text: str = "";
+    has image_b64: str = "";
 
     can process with `root entry {
         # Agent 1: Analyze lecture notes and extract atomic concepts
-        extracted = extract_concepts_from_text(self.lecture_title, self.notes_text);
+        if self.image_b64.strip() {
+            image_bytes = base64.b64decode(self.image_b64, validate=True);
+            image_factory = Image;
+            extracted = extract_concepts_from_image(
+                self.lecture_title,
+                self.notes_text,
+                image_factory(image_bytes)  # jac:ignore[E1053]
+            );
+        } else {
+            extracted = extract_concepts_from_text(self.lecture_title, self.notes_text);
+        }
 
         # Agent 2: Build and stitch knowledge graph from root
         builder = root spawn build_lecture_graph(
