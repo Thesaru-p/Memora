@@ -1,7 +1,7 @@
 cl import from "@jac/mobui" { View, Text, TextInput, ScrollView, Pressable, StyleSheet }
 cl import from .preview_image_picker { PreviewImagePicker }
 
-sv import from main { get_dashboard, get_openrouter_status, ingest_lecture }
+sv import from main { get_dashboard, get_openrouter_status, ingest_lecture, get_quiz, submit_quiz, get_notifications }
 
 cl glob styles = StyleSheet.create({
     "screen": {"flex": 1, "backgroundColor": "#f4f6f5"},
@@ -57,7 +57,131 @@ cl def:pub MemoraDashboard() -> JsxElement {
         ingestion_mode: str = "append",
         selected_slides: list = [],
         session_slides_count: int = 0;
+    has review_subject: str = "Science",
+        quiz_id: str = "",
+        quiz_questions: list[dict] = [],
+        quiz_answers: list[dict] = [],
+        quiz_index: int = 0,
+        quiz_prompt: str = "",
+        quiz_options: list[str] = [],
+        selected_answer: str = "",
+        quiz_status: str = "Choose a subject and generate a quiz.",
+        quiz_error: str = "",
+        quiz_busy: bool = False,
+        quiz_finished: bool = False,
+        review_alerts: str = "Check for reviews due in this subject.",
+        alerts_busy: bool = False;
 
+    async def load_quiz() {
+        quiz_busy = True;
+        quiz_error = "";
+        quiz_finished = False;
+        quiz_questions = [];
+        quiz_answers = [];
+        quiz_id = "";
+        if not review_subject.strip() {
+            quiz_error = "Enter a subject name.";
+            quiz_busy = False;
+            return;
+        }
+        try {
+            result = root spawn get_quiz(subject_name=review_subject);
+            if result.reports and len(result.reports) > 0 {
+                data = result.reports[len(result.reports) - 1];
+                if str(data["status"]) == "success" {
+                    quiz_id = str(data["quiz_id"]);
+                    quiz_questions = data["questions"] as list[dict];
+                    quiz_index = 0;
+                    if len(quiz_questions) > 0 {
+                        quiz_prompt = str(quiz_questions[0]["prompt"]);
+                        quiz_options = quiz_questions[0]["options"] as list[str];
+                        quiz_status = "Question 1 of " + str(len(quiz_questions));
+                    } else {
+                        quiz_error = "The quiz had no questions.";
+                    }
+                } else {
+                    quiz_error = str(data["error"]);
+                }
+            } else {
+                quiz_error = "The quiz endpoint returned no result.";
+            }
+        } except Exception {
+            quiz_error = "Could not generate the quiz. Check the server output.";
+        }
+        quiz_busy = False;
+    }
+
+    async def submit_answer() {
+        if not quiz_id or quiz_busy or not selected_answer {
+            return;
+        }
+        question = quiz_questions[quiz_index];
+        quiz_answers = quiz_answers + [{"question_id": question["id"], "submitted_answer": selected_answer}];
+        selected_answer = "";
+        if quiz_index + 1 < len(quiz_questions) {
+            quiz_index += 1;
+            quiz_prompt = str(quiz_questions[quiz_index]["prompt"]);
+            quiz_options = quiz_questions[quiz_index]["options"] as list[str];
+            quiz_status = "Question " + str(quiz_index + 1) + " of " + str(len(quiz_questions));
+            return;
+        }
+        finish_quiz();
+    }
+
+    async def finish_quiz() {
+        if quiz_busy or not quiz_id or len(quiz_answers) != len(quiz_questions) {
+            return;
+        }
+        quiz_busy = True;
+        quiz_error = "";
+        try {
+            result = root spawn submit_quiz(quiz_id=quiz_id, submissions=quiz_answers);
+            if result.reports and len(result.reports) > 0 {
+                data = result.reports[len(result.reports) - 1];
+                if str(data["status"]) == "success" {
+                    quiz_status = "Score: " + str(data["correct_items"]) + "/" + str(data["total_items"]) + " · " + str(data["accuracy_pct"]) + "%";
+                    quiz_finished = True;
+                } else {
+                    quiz_error = str(data["error"]);
+                }
+            } else {
+                quiz_error = "Submission returned no result.";
+            }
+        } except Exception {
+            quiz_error = "Could not submit answers. Retry after checking the server.";
+        }
+        quiz_busy = False;
+    }
+
+    async def check_review_alerts() {
+        alerts_busy = True;
+        try {
+            result = root spawn get_notifications(subject_name=review_subject);
+            if result.reports and len(result.reports) > 0 {
+                data = result.reports[len(result.reports) - 1];
+                if str(data["status"]) == "success" {
+                    notifications = data["notifications"] as list[dict];
+                    count = len(notifications);
+                    if count > 0 {
+                        review_alerts = str(count) + " review(s) due. " + str(notifications[0]["message"]);
+                    } elif data.get("next_review") is not None {
+                        upcoming = data["next_review"] as dict;
+                        hours = float(upcoming["hours_until_due"]);
+                        review_alerts = "No reviews due yet. Next: " + str(upcoming["concept_name"]) + " in about " + str(round(hours, 1)) + " hours.";
+                    } else {
+                        review_alerts = "No reviews scheduled for this subject yet.";
+                    }
+                } else {
+                    review_alerts = str(data["error"]);
+                }
+            } else {
+                review_alerts = "No reminder result returned.";
+            }
+        } except Exception {
+            review_alerts = "Could not check reminders.";
+        }
+        alerts_busy = False;
+    }
     def image_selected(encoded: str, name: str, size: int, mime_type: str, all_items: list[dict] | None = None) -> None {
         upload_error = "";
         if not mime_type.startswith("image/") {
@@ -332,6 +456,41 @@ cl def:pub MemoraDashboard() -> JsxElement {
             <Text style={styles.value}>{retention_text}</Text>
             <View style={styles.track}><View style={[styles.fill, {"width": retention_width}]} /></View>
             <Text style={styles.note}>Keep concepts fresh with a short review.</Text>
+        </View>
+        <View style={styles.card}>
+            <Text style={styles.label}>Quiz and scheduler test</Text>
+            <Text style={styles.title}>Review a saved subject</Text>
+            <TextInput
+                accessibilityLabel="Review subject name"
+                placeholder="Subject"
+                value={review_subject}
+                onChangeText={lambda (value: str) { review_subject = value; }}
+                style={styles.input}
+            />
+            <Pressable accessibilityRole="button" disabled={quiz_busy} onPress={load_quiz} style={styles.button}>
+                <Text style={styles.buttonText}>{"Generating…" if quiz_busy else "Generate Quiz"}</Text>
+            </Pressable>
+            <Text accessibilityLiveRegion="polite" style={styles.error if quiz_error != "" else styles.note}>{quiz_error if quiz_error != "" else quiz_status}</Text>
+            {quiz_id != "" and not quiz_finished and <View style={{"gap": 10}}>
+                <Text style={styles.title}>{quiz_prompt}</Text>
+                {len(quiz_options) == 4 and <View style={{"gap": 8}}>
+                    <Pressable accessibilityRole="button" onPress={lambda { selected_answer = quiz_options[0]; }} style={styles.input}><Text>{quiz_options[0]}</Text></Pressable>
+                    <Pressable accessibilityRole="button" onPress={lambda { selected_answer = quiz_options[1]; }} style={styles.input}><Text>{quiz_options[1]}</Text></Pressable>
+                    <Pressable accessibilityRole="button" onPress={lambda { selected_answer = quiz_options[2]; }} style={styles.input}><Text>{quiz_options[2]}</Text></Pressable>
+                    <Pressable accessibilityRole="button" onPress={lambda { selected_answer = quiz_options[3]; }} style={styles.input}><Text>{quiz_options[3]}</Text></Pressable>
+                </View>}
+                <Text style={styles.note}>{"Selected: " + selected_answer if selected_answer != "" else "Choose an answer."}</Text>
+                <Pressable accessibilityRole="button" disabled={quiz_busy or selected_answer == ""} onPress={submit_answer} style={styles.button}>
+                    <Text style={styles.buttonText}>{"Submit Quiz" if quiz_index + 1 == len(quiz_questions) else "Next Question"}</Text>
+                </Pressable>
+                {quiz_error != "" and len(quiz_answers) == len(quiz_questions) and <Pressable accessibilityRole="button" disabled={quiz_busy} onPress={finish_quiz} style={styles.button}>
+                    <Text style={styles.buttonText}>Retry Submission</Text>
+                </Pressable>}
+            </View>}
+            <Pressable accessibilityRole="button" disabled={alerts_busy} onPress={check_review_alerts} style={styles.button}>
+                <Text style={styles.buttonText}>{"Checking…" if alerts_busy else "Check Review Alerts"}</Text>
+            </Pressable>
+            <Text accessibilityLiveRegion="polite" style={styles.note}>{review_alerts}</Text>
         </View>
         <View style={styles.card}>
             <Text style={styles.label}>Concepts in rotation</Text>

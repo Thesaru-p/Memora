@@ -334,4 +334,3 @@ test "multi-slide append mode updates overlapping concept summaries while preser
     all_c = [c for c in [lec-->] if isinstance(c, ConceptNode)];
     assert len(all_c) == 2;
 }
-

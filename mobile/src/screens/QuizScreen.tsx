@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, ActivityIndicator } from 'react-native';
 import { api } from '../api/client';
 import { QuizPayload, QuizQuestion, StudentSubmissionItem, QuizEvaluationResult } from '../types';
@@ -16,45 +16,62 @@ export const QuizScreen: React.FC<Props> = ({ onBack, onFinishQuiz }) => {
   const [timeLeft, setTimeLeft] = useState(45);
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
+  const [started, setStarted] = useState(false);
+  const [error, setError] = useState('');
+  const [pendingSubmissions, setPendingSubmissions] = useState<StudentSubmissionItem[] | null>(null);
+  const advancing = useRef(false);
+  const startedAt = useRef(0);
 
-  useEffect(() => {
-    const fetchQuizData = async () => {
-      try {
-        const res = await api.getQuiz('Computer Networks');
-        setQuiz(res);
-        setLoading(false);
-      } catch (e) {
-        console.error(e);
-      }
-    };
-    fetchQuizData();
-  }, []);
+  const fetchQuizData = async () => {
+    setLoading(true);
+    setError('');
+    try {
+      const res = await api.getQuiz('Computer Networks');
+      setQuiz(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not load quiz');
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => { fetchQuizData(); }, []);
 
   // Timer countdown
   useEffect(() => {
-    if (loading || submitting || !quiz) return;
+    if (loading || submitting || !quiz || !started || pendingSubmissions) return;
     const interval = setInterval(() => {
-      setTimeLeft((prev) => {
-        if (prev <= 1) {
-          handleNext(selectedOption || '');
-          return 45;
-        }
-        return prev - 1;
-      });
+      setTimeLeft((prev) => Math.max(0, prev - 1));
     }, 1000);
     return () => clearInterval(interval);
-  }, [loading, submitting, quiz, currentIndex, selectedOption]);
+  }, [loading, submitting, quiz, currentIndex, started, pendingSubmissions]);
+
+  useEffect(() => {
+    if (started && timeLeft === 0 && !pendingSubmissions) handleNext(selectedOption || '');
+  }, [timeLeft, started, pendingSubmissions]);
+
+  const submitAnswers = async (answers: StudentSubmissionItem[]) => {
+    if (!quiz) return;
+    setSubmitting(true);
+    setError('');
+    try {
+      const result = await api.submitQuiz(quiz.quiz_id, answers, Math.floor((Date.now() - startedAt.current) / 1000));
+      onFinishQuiz(result);
+    } catch (e) {
+      setPendingSubmissions(answers);
+      setError(e instanceof Error ? e.message : 'Submission failed');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   const handleNext = async (answer: string) => {
-    if (!quiz) return;
+    if (!quiz || advancing.current || submitting) return;
+    advancing.current = true;
     const currentQ: QuizQuestion = quiz.questions[currentIndex];
 
     const currentSub: StudentSubmissionItem = {
       question_id: currentQ.id,
-      concept_id: currentQ.concept_id,
       submitted_answer: answer,
-      correct_answer: currentQ.correct_answer,
-      explanation: currentQ.explanation,
     };
 
     const updatedSubs = [...submissions, currentSub];
@@ -64,15 +81,10 @@ export const QuizScreen: React.FC<Props> = ({ onBack, onFinishQuiz }) => {
 
     if (currentIndex + 1 < quiz.questions.length) {
       setCurrentIndex(currentIndex + 1);
+      advancing.current = false;
     } else {
-      // Quiz Complete -> submit to Evaluator Agent
-      setSubmitting(true);
-      try {
-        const evalResult = await api.submitQuiz(quiz.quiz_id, updatedSubs);
-        onFinishQuiz(evalResult);
-      } catch (e) {
-        console.error(e);
-      }
+      setPendingSubmissions(updatedSubs);
+      await submitAnswers(updatedSubs);
     }
   };
 
@@ -88,10 +100,44 @@ export const QuizScreen: React.FC<Props> = ({ onBack, onFinishQuiz }) => {
   if (!quiz || quiz.questions.length === 0) {
     return (
       <View style={[styles.container, styles.center]}>
-        <Text style={styles.errorText}>No quiz questions available.</Text>
+        <Text style={styles.errorText}>{error || 'No quiz questions available.'}</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={fetchQuizData}><Text style={styles.backBtnText}>Retry Quiz</Text></TouchableOpacity>
         <TouchableOpacity style={styles.backBtn} onPress={onBack}>
           <Text style={styles.backBtnText}>Return to Dashboard</Text>
         </TouchableOpacity>
+      </View>
+    );
+  }
+
+  if (!started) {
+    return (
+      <ScrollView style={styles.container}>
+        <Text style={styles.previewTitle}>Your 3-Minute Review</Text>
+        <Text style={styles.loadingText}>{quiz.total_questions} questions from your knowledge graph</Text>
+        {(quiz.plan || []).map((concept) => (
+          <View style={styles.promptCard} key={concept.concept_id}>
+            <Text style={styles.promptText}>{concept.concept_name}</Text>
+            <Text style={styles.loadingText}>{Math.round(concept.retrievability * 100)}% retention · {concept.status}</Text>
+            <Text style={styles.loadingText}>{concept.selection_reason}</Text>
+          </View>
+        ))}
+        <TouchableOpacity style={styles.confirmBtn} onPress={() => { startedAt.current = Date.now(); setStarted(true); }}>
+          <Text style={styles.confirmBtnText}>Start Review</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.backBtn} onPress={onBack}><Text style={styles.backBtnText}>Back to Dashboard</Text></TouchableOpacity>
+      </ScrollView>
+    );
+  }
+
+  if (pendingSubmissions) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        {submitting && <ActivityIndicator size="large" color="#6366F1" />}
+        <Text style={styles.loadingText}>{submitting ? 'Updating your memory curve…' : 'Your answers are ready to submit.'}</Text>
+        {!!error && <Text style={styles.errorText}>{error}</Text>}
+        {!submitting && <TouchableOpacity style={styles.confirmBtn} onPress={() => submitAnswers(pendingSubmissions)}>
+          <Text style={styles.confirmBtnText}>Retry Submission</Text>
+        </TouchableOpacity>}
       </View>
     );
   }
@@ -182,4 +228,5 @@ const styles = StyleSheet.create({
   errorText: { color: '#EF4444', fontSize: 16, marginBottom: 16 },
   backBtn: { backgroundColor: '#6366F1', paddingHorizontal: 16, paddingVertical: 10, borderRadius: 8 },
   backBtnText: { color: '#FFFFFF', fontWeight: '700' },
+  previewTitle: { color: '#FFFFFF', fontSize: 24, fontWeight: '800', marginTop: 32 },
 });

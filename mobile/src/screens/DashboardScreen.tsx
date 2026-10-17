@@ -11,7 +11,7 @@ import {
 import { api } from '../api/client';
 import { AppHeader } from '../components/AppHeader';
 import { colors } from '../theme';
-import { DashboardData } from '../types';
+import { DashboardData, ReviewSchedule } from '../types';
 
 interface Props {
   onStartQuiz: () => void;
@@ -29,6 +29,21 @@ export const DashboardScreen: React.FC<Props> = ({
   const [data, setData] = useState<DashboardData | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState('');
+  const [schedule, setSchedule] = useState<ReviewSchedule | null>(null);
+  const [alertError, setAlertError] = useState('');
+  const [alertsLoading, setAlertsLoading] = useState(false);
+
+  const checkAlerts = async () => {
+    setAlertsLoading(true);
+    setAlertError('');
+    try {
+      setSchedule(await api.getNotifications('Computer Networks'));
+    } catch (e) {
+      setAlertError(e instanceof Error ? e.message : 'Could not check reminders');
+    } finally {
+      setAlertsLoading(false);
+    }
+  };
 
   const loadData = async () => {
     try {
@@ -98,6 +113,33 @@ export const DashboardScreen: React.FC<Props> = ({
         </View>
       </View>
 
+      <Text style={styles.sectionTitle}>Review tools</Text>
+      <View style={styles.reviewCard}>
+        <Text style={styles.reviewTitle}>Quiz and scheduler</Text>
+        <Text style={styles.reviewCopy}>Generate a short quiz or check when your saved concepts need review.</Text>
+        <TouchableOpacity style={styles.reviewButton} onPress={onStartQuiz}>
+          <Text style={styles.reviewButtonText}>Generate Quiz</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.reviewButton} onPress={checkAlerts} disabled={alertsLoading}>
+          <Text style={styles.reviewButtonText}>{alertsLoading ? 'Checking…' : 'Check Review Alerts'}</Text>
+        </TouchableOpacity>
+        {!!alertError && <Text style={styles.alertMessage}>{alertError}</Text>}
+        {schedule !== null && schedule.notifications.length === 0 && (
+          <Text style={styles.reviewCopy}>
+            {schedule.next_review
+              ? `No reviews due yet. Next: ${schedule.next_review.concept_name} in about ${schedule.next_review.hours_until_due.toFixed(1)} hours.`
+              : 'No reviews scheduled for this subject yet.'}
+          </Text>
+        )}
+        {schedule?.notifications.map((alert) => (
+          <View key={alert.id} style={styles.alertItem}>
+            <Text style={styles.reviewTitle}>{alert.title} · {alert.urgency}</Text>
+            <Text style={styles.reviewCopy}>{alert.message}</Text>
+            <TouchableOpacity onPress={onStartQuiz}><Text style={styles.alertAction}>Start Review →</Text></TouchableOpacity>
+          </View>
+        ))}
+      </View>
+
       <Text style={styles.sectionTitle}>Learning tools</Text>
       <TouchableOpacity style={styles.actionCard} onPress={onOpenUpload}>
         <View style={styles.actionIcon}><Text style={styles.actionIconText}>＋</Text></View>
@@ -156,4 +198,12 @@ const styles = StyleSheet.create({
   actionTitle: { color: colors.text, fontSize: 14, fontWeight: '800' },
   actionCopy: { color: colors.muted, fontSize: 11, lineHeight: 16, marginTop: 2 },
   chevron: { color: colors.primaryDark, fontSize: 26 },
+  reviewCard: { backgroundColor: colors.surface, borderWidth: 1, borderColor: colors.border, borderRadius: 16, padding: 14, marginBottom: 22, gap: 10 },
+  reviewTitle: { color: colors.text, fontSize: 15, fontWeight: '800' },
+  reviewCopy: { color: colors.muted, fontSize: 12, lineHeight: 18 },
+  reviewButton: { backgroundColor: colors.primary, borderRadius: 10, paddingVertical: 12, alignItems: 'center' },
+  reviewButtonText: { color: colors.text, fontSize: 13, fontWeight: '800' },
+  alertItem: { borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 10, marginTop: 4 },
+  alertMessage: { color: colors.danger, fontSize: 12 },
+  alertAction: { color: colors.primaryDark, fontWeight: '800', paddingVertical: 8 },
 });
