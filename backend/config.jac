@@ -121,13 +121,13 @@ def request_openrouter(
         );
 
         result.request_attempted = True;
-        with (urlopen(req, timeout=25) as HTTPResponse) as response {
+        with urlopen(req, timeout=25) as response {
             result.http_status = int(response.status);
             res_data = json.loads(response.read().decode("utf-8"));
             result.status = "invalid_response";
             result.message = "OpenRouter returned no usable model answer.";
-            choices: list[dict[str, any]] = res_data.get("choices", []) as list[dict[str, any]];
-            if choices and len(choices) > 0 {
+            choices = res_data.get("choices", []);
+            if choices {
                 msg = choices[0].get("message", {});
                 content = msg.get("content", "");
                 if content {
