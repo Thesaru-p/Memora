@@ -14,66 +14,62 @@ obj RawExtractedConcept {
     has prerequisites: list[str] = [];
 }
 
+def parse_extracted_concepts(raw_response: str) -> list[RawExtractedConcept] {
+    if not raw_response {
+        return [];
+    }
+    try {
+        cleaned = raw_response.strip();
+        if cleaned.startswith("```") {
+            first_newline = cleaned.find("\n");
+            if first_newline >= 0 {
+                cleaned = cleaned[first_newline + 1:];
+            }
+            if cleaned.endswith("```") {
+                cleaned = cleaned[:-3].strip();
+            }
+        }
+        parsed = json.loads(cleaned);
+        items = parsed.get("concepts", []) if isinstance(parsed, dict) else parsed;
+        if not isinstance(items, list) or len(items) < 4 or len(items) > 8 {
+            print("[Concept Parser Error] Expected 4-8 concepts.");
+            return [];
+        }
+        extracted: list[RawExtractedConcept] = [];
+        for item in items {
+            name = str(item.get("name", "")).strip();
+            summary = str(item.get("summary", "")).strip();
+            prerequisites = item.get("prerequisites", []);
+            if not name or not summary or not isinstance(prerequisites, list) {
+                print("[Concept Parser Error] Concept fields are incomplete.");
+                return [];
+            }
+            difficulty = float(item.get("difficulty", 5.0));
+            if difficulty < 1.0 {
+                difficulty = 1.0;
+            } elif difficulty > 10.0 {
+                difficulty = 10.0;
+            }
+            extracted.append(RawExtractedConcept(
+                name=name,
+                summary=summary,
+                formula_or_rule=str(item.get("formula_or_rule", "")),
+                difficulty=difficulty,
+                prerequisites=[str(value) for value in prerequisites]
+            ));
+        }
+        return extracted;
+    } except Exception as e {
+        print(f"[Concept Parser Error] {e}");
+        return [];
+    }
+}
+
 # Meaning-Typed concept extraction with OpenRouter Vision model
 def extract_concepts_from_text(lecture_title: str, notes_content: str, image_b64: str = "") -> list[RawExtractedConcept] {
-    # If OpenRouter is available, query Nemotron 3.5 Super VL
-    sys_prompt = "You are an expert cognitive learning assistant. Analyze lecture notes or slide images. Extract 3-5 core concepts in JSON format as a list of objects with keys: name, summary, formula_or_rule, difficulty (1-10), prerequisites (list of strings). Output ONLY valid JSON.";
+    sys_prompt = "You are an expert cognitive learning assistant. Analyze only the supplied lecture notes or image. Return one JSON object with a concepts key containing 4-8 atomic concepts. Every concept must contain name, a one-sentence summary, formula_or_rule, difficulty from 1 to 10, and prerequisite concept names from the same response. Do not add unrelated subject matter.";
     user_prompt = f"Lecture Title: {lecture_title}\nNotes Content: {notes_content}";
 
-    raw_response = query_openrouter(MODEL_VISION, sys_prompt, user_prompt, image_b64);
-    if raw_response {
-        try {
-            parsed = json.loads(raw_response);
-            if isinstance(parsed, list) and len(parsed) > 0 {
-                extracted: list[RawExtractedConcept] = [];
-                for item in parsed {
-                    extracted.append(RawExtractedConcept(
-                        name=item.get("name", "Concept"),
-                        summary=item.get("summary", ""),
-                        formula_or_rule=item.get("formula_or_rule", ""),
-                        difficulty=float(item.get("difficulty", 5.0)),
-                        prerequisites=item.get("prerequisites", [])
-                    ));
-                }
-                if len(extracted) > 0 {
-                    return extracted;
-                }
-            }
-        } except Exception as e {
-            print(f"[Concept Parser Fallback] {e}");
-        }
-    }
-
-    # Grounded Computer Networks concept set
-    concepts: list[RawExtractedConcept] = [
-        RawExtractedConcept(
-            name="IP Addressing & Subnetting",
-            summary="Hierarchical addressing scheme using network prefix and host identifier.",
-            formula_or_rule="Host Capacity = 2^(32 - Prefix) - 2",
-            difficulty=6.0,
-            prerequisites=[]
-        ),
-        RawExtractedConcept(
-            name="CIDR Notation",
-            summary="Classless Inter-Domain Routing replaces traditional A/B/C classes with slash prefix notation.",
-            formula_or_rule="/24 indicates 24 network bits and 8 host bits",
-            difficulty=5.0,
-            prerequisites=["IP Addressing & Subnetting"]
-        ),
-        RawExtractedConcept(
-            name="Subnet Masks & ANDing",
-            summary="Bitwise logical AND operation between IP address and subnet mask determines the Network Address.",
-            formula_or_rule="Network Address = IP & Subnet Mask",
-            difficulty=7.0,
-            prerequisites=["IP Addressing & Subnetting", "CIDR Notation"]
-        ),
-        RawExtractedConcept(
-            name="Default Gateway",
-            summary="The routing interface that forwards packets destined outside the local broadcast domain.",
-            formula_or_rule="Packets matching local subnet are delivered via ARP; external packets go to Gateway.",
-            difficulty=4.0,
-            prerequisites=["Subnet Masks & ANDing"]
-        )
-    ];
-    return concepts;
+    raw_response = query_openrouter(MODEL_VISION, sys_prompt, user_prompt, image_b64, True, 4096);
+    return parse_extracted_concepts(raw_response);
 }

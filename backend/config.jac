@@ -52,7 +52,14 @@ def resolve_openrouter_model(model: str) -> str {
 }
 
 # The diagnostic and every agent use this exact credential/request path.
-def request_openrouter(model: str, system_prompt: str, user_prompt: str, image_b64: str = "") -> OpenRouterResponse {
+def request_openrouter(
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    image_b64: str = "",
+    json_mode: bool = False,
+    max_tokens: int = 2048
+) -> OpenRouterResponse {
     dotenv.load_dotenv();
     api_key: str = os.environ.get("OPENROUTER_API_KEY", "").strip();
     selected_model = resolve_openrouter_model(model);
@@ -86,12 +93,17 @@ def request_openrouter(model: str, system_prompt: str, user_prompt: str, image_b
             messages.append({"role": "user", "content": user_prompt});
         }
 
-        req_body = json.dumps({
+        request_data: dict[str, any] = {
             "model": selected_model,
             "messages": messages,
             "temperature": 0.3,
-            "max_tokens": 1024
-        }).encode("utf-8");
+            "max_tokens": max_tokens,
+            "reasoning": {"enabled": False, "exclude": True}
+        };
+        if json_mode {
+            request_data["response_format"] = {"type": "json_object"};
+        }
+        req_body = json.dumps(request_data).encode("utf-8");
 
         headers: dict[str, str] = {
             "Content-Type": "application/json",
@@ -126,8 +138,7 @@ def request_openrouter(model: str, system_prompt: str, user_prompt: str, image_b
                 reasoning = msg.get("reasoning", "");
                 if reasoning {
                     result.status = "reasoning_only";
-                    result.message = "OpenRouter accepted the request but returned reasoning without a final answer. Lecture JSON extraction may fall back.";
-                    result.content = str(reasoning);
+                    result.message = "OpenRouter accepted the request but returned reasoning without a final answer. Lecture extraction will stop without writing graph nodes.";
                     return result;
                 }
             }
@@ -164,9 +175,20 @@ def request_openrouter(model: str, system_prompt: str, user_prompt: str, image_b
     return result;
 }
 
-# Existing agents keep their string API and fallback behavior.
-def query_openrouter(model: str, system_prompt: str, user_prompt: str, image_b64: str = "") -> str {
-    result = request_openrouter(model, system_prompt, user_prompt, image_b64);
+# Agents receive only final model content. Failed or reasoning-only requests are empty.
+def query_openrouter(
+    model: str,
+    system_prompt: str,
+    user_prompt: str,
+    image_b64: str = "",
+    json_mode: bool = False,
+    max_tokens: int = 2048
+) -> str {
+    result = request_openrouter(model, system_prompt, user_prompt, image_b64, json_mode, max_tokens);
+    if result.status in ["provider_error", "timeout", "network_error"] {
+        print(f"[OpenRouter Query Retry] {result.status}");
+        result = request_openrouter(model, system_prompt, user_prompt, image_b64, json_mode, max_tokens);
+    }
     if result.status != "connected" {
         print(f"[OpenRouter Query Warning] {result.status}: {result.message}");
     }

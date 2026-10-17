@@ -42,6 +42,17 @@ walker:pub ingest_lecture {
     can process with `Root entry {
         # Agent 1: Analyze lecture notes (text or image) and extract atomic concepts
         extracted = extract_concepts_from_text(self.lecture_title, self.notes_text, self.image_b64);
+        if len(extracted) == 0 {
+            report {
+                "status": "error",
+                "error": "AI concept extraction failed. No graph nodes were created. Check the OpenRouter status and server output, then retry.",
+                "subject": self.subject_name,
+                "lecture_title": self.lecture_title,
+                "concepts_extracted": [],
+                "total_concepts": 0
+            };
+            return;
+        }
 
         # Agent 2: Build and stitch knowledge graph from root
         builder = root spawn build_lecture_graph(
@@ -66,6 +77,7 @@ walker:pub ingest_lecture {
             "status": "success",
             "subject": self.subject_name,
             "lecture_title": self.lecture_title,
+            "extraction_source": "openrouter",
             "concepts_extracted": concept_summaries,
             "total_concepts": len(concept_summaries),
             "day_1_quiz_scheduled_in_hours": 24

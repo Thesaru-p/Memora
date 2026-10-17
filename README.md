@@ -130,7 +130,9 @@ opening or refreshing the dashboard does not automatically call OpenRouter.
 
 Green **Connection verified** means the model returned an answer. Other statuses
 identify a missing key, authentication/access failure, rate limit, network timeout,
-or missing final answer. A successful connection does not validate lecture JSON
-extraction; the existing analyzer still has its demo fallback.
+or missing final answer. Lecture ingestion separately requires a valid structured
+response containing 4-8 concepts. If extraction fails, the endpoint returns an
+error and writes no lecture or concept nodes; it never substitutes demo concepts.
 
-Run the offline diagnostic tests with `jac test tests/test_openrouter_status.jac`.
+Run the offline diagnostic tests with `jac test tests/test_openrouter_status.jac`
+and `jac test tests/test_lecture_analyzer.jac`.

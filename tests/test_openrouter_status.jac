@@ -47,6 +47,8 @@ test "live check sends the backend bearer key and the same vision model" {
                 payload = json.loads(str(request.data.decode("utf-8")));
                 assert request.get_header("Authorization") == "Bearer test-only-key";
                 assert payload["model"] == "test-vision";
+                assert payload["max_tokens"] == 2048;
+                assert payload["reasoning"] == {"enabled": False, "exclude": True};
                 assert status["status"] == "connected";
                 assert status["request_attempted"] == True;
                 assert status["http_status"] == 200;
@@ -102,7 +104,25 @@ test "invalid and reasoning-only replies are not green connection checks" {
                 status = config.openrouter_status(True);
                 assert status["status"] == "reasoning_only";
                 assert "content" not in status;
-                assert config.query_openrouter(config.MODEL_VISION, "system", "user") == "thinking";
+                assert config.query_openrouter(config.MODEL_VISION, "system", "user") == "";
+            }
+        }
+    }
+}
+
+test "structured extraction requests JSON with the requested output budget" {
+    response = MagicMock(status=200);
+    response.__enter__.return_value = response;
+    response.read.return_value = json.dumps({"choices": [{"message": {"content": "{\"concepts\": []}"}}]}).encode("utf-8");
+    with patch.object(config.dotenv, "load_dotenv") {
+        with (patch.dict(os.environ, {"OPENROUTER_API_KEY": "test-only-key"}) as AbstractContextManager) {
+            with patch.object(config, "urlopen", return_value=response) as send {
+                content = config.query_openrouter(config.MODEL_VISION, "system", "user", "", True, 4096);
+                request = send.call_args[0][0];
+                payload = json.loads(str(request.data.decode("utf-8")));
+                assert content == "{\"concepts\": []}";
+                assert payload["response_format"] == {"type": "json_object"};
+                assert payload["max_tokens"] == 4096;
             }
         }
     }
