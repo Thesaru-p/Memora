@@ -3,6 +3,7 @@
 
 import base64;
 import time;
+import from backend.config { openrouter_status }
 import from backend.graph { SubjectNode, LectureNode, ConceptNode, QuizNode, QuestionNode, depends_on }
 import from backend.ebbinghaus { calc_retrievability, classify_retention_status }
 import from backend.agents.lecture_analyzer {
@@ -19,6 +20,14 @@ import from .components.MemoraDashboard { MemoraDashboard }
 
 def:pub app() -> JsxElement {
     return <MemoraDashboard />;
+}
+
+walker:pub get_openrouter_status {
+    has verify: bool = False;
+
+    can check with `Root entry {
+        report openrouter_status(self.verify);
+    }
 }
 
 # -------------------------------------------------------------
@@ -227,6 +236,6 @@ with entry {
     print("==================================================");
     print("Memora - Ebbinghaus Spaced Repetition Multi-Agent System");
     print("Jac Platform Backend initialized and ready!");
-    print("Public Walkers: ingest_lecture, get_dashboard, get_quiz, submit_quiz, get_graph_data, get_analytics, get_notifications");
+    print("Public Walkers: ingest_lecture, get_dashboard, get_openrouter_status, get_quiz, submit_quiz, get_graph_data, get_analytics, get_notifications");
     print("==================================================");
 }

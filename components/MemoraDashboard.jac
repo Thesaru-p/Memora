@@ -1,6 +1,6 @@
 cl import from "@jac/mobui" { View, Text, ScrollView, Pressable, StyleSheet }
 
-sv import from ..main { get_dashboard }
+sv import from ..main { get_dashboard, get_openrouter_status }
 
 cl glob styles = StyleSheet.create({
     "screen": {"flex": 1, "backgroundColor": "#f4f6f5"},
@@ -30,6 +30,49 @@ cl def:pub MemoraDashboard() -> JsxElement {
         retention_width: str = "0%",
         loading: bool = True,
         error_message: str = "";
+    has ai_status: str = "Checking configuration…",
+        ai_message: str = "Reading the running backend configuration.",
+        ai_model: str = "",
+        ai_color: str = "#65756e",
+        ai_checking: bool = False;
+
+    async def load_ai_status(verify: bool) {
+        ai_checking = True;
+        ai_color = "#65756e";
+        ai_status = "Testing connection…" if verify else "Checking configuration…";
+        try {
+            result = root spawn get_openrouter_status(verify=verify);
+            if result.reports and len(result.reports) > 0 {
+                data = result.reports[0];
+                status = str(data["status"]);
+                ai_model = str(data["model"]);
+                ai_message = str(data["message"]);
+                ai_status = status.replace("_", " ");
+                ai_color = "#b42318";
+                if status == "connected" {
+                    ai_status = "Connection verified";
+                    ai_color = "#008565";
+                } elif status == "configured" {
+                    ai_status = "Key loaded · not tested";
+                    ai_color = "#946200";
+                } elif status == "reasoning_only" {
+                    ai_status = "No final model answer";
+                    ai_color = "#946200";
+                } elif status == "missing_key" {
+                    ai_status = "Key missing in backend";
+                }
+            } else {
+                ai_status = "Status unavailable";
+                ai_message = "The backend did not return a connection status.";
+                ai_color = "#b42318";
+            }
+        } except Exception {
+            ai_status = "Status unavailable";
+            ai_message = "Could not reach the status endpoint. Retry after rebuilding the preview.";
+            ai_color = "#b42318";
+        }
+        ai_checking = False;
+    }
 
     async def load_overview() {
         loading = True;
@@ -54,7 +97,10 @@ cl def:pub MemoraDashboard() -> JsxElement {
         loading = False;
     }
 
-    can with entry { load_overview(); }
+    can with entry {
+        load_overview();
+        load_ai_status(False);
+    }
 
     return <ScrollView style={styles.screen} contentContainerStyle={styles.content}>
         <View style={styles.header}>
@@ -63,6 +109,18 @@ cl def:pub MemoraDashboard() -> JsxElement {
                 <Text style={styles.label}>Memora · CS-301</Text>
                 <Text style={styles.heading}>Computer Networks</Text>
             </View>
+        </View>
+        <View style={styles.card}>
+            <Text style={styles.label}>OpenRouter · Lecture AI</Text>
+            <View accessibilityLiveRegion="polite" style={{"flexDirection": "row", "alignItems": "center", "gap": 8}}>
+                <View style={{"width": 10, "height": 10, "borderRadius": 5, "backgroundColor": ai_color}} />
+                <Text style={[styles.title, {"color": ai_color, "flex": 1}]}>{ai_status}</Text>
+            </View>
+            <Text style={styles.note}>{ai_message}</Text>
+            {ai_model != "" and <Text style={styles.label}>{ai_model}</Text>}
+            <Pressable accessibilityRole="button" disabled={ai_checking} onPress={lambda { load_ai_status(True); }} style={styles.button}>
+                <Text style={styles.buttonText}>{"Checking…" if ai_checking else "Test OpenRouter"}</Text>
+            </Pressable>
         </View>
         <View style={styles.card}>
             <Text style={styles.label}>Retention health</Text>

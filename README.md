@@ -105,6 +105,7 @@ The Jac backend exposes the following public walkers for the mobile client:
 | :--- | :--- | :--- |
 | `POST /walker/ingest_lecture` | POST | Extracts concepts from notes/slides and anchors them to the Jac graph |
 | `POST /walker/get_dashboard` | POST | Retrieves subject overview, retention health %, and streak counter |
+| `POST /walker/get_openrouter_status` | POST | Reports whether the backend loaded its API key; `{"verify": true}` tests the ingestion model |
 | `POST /walker/get_quiz` | POST | Plans and generates a 3-4 minute micro-quiz targeting fading concepts |
 | `POST /walker/submit_quiz` | POST | Grades answers, returns missed question explanations, and recalibrates stability |
 | `POST /walker/get_graph_data` | POST | Supplies nodes and edges for the mobile visual concept map |
@@ -117,3 +118,19 @@ The Jac backend exposes the following public walkers for the mobile client:
 - **≥ 80% Jac Language Code**: Core cognitive decay math, graph storage, traversal, and all agents are implemented 100% in Jac.
 - **Object-Spatial Persistence**: Graphs persist natively from `root` without an external database.
 - **Hosted on JacHammer**: Ready for deployment to `jachammer.ai`.
+
+### Checking OpenRouter in JacHammer
+
+The mobile dashboard's **OpenRouter · Lecture AI** card reads the configuration
+from the running backend, without returning any API key or key fragment. An amber
+**Key loaded · not tested** means the key is present, not that OpenRouter accepted
+it. Tap **Test OpenRouter** to send a small prompt through the same request helper
+and vision-model override used by lecture ingestion. This uses one model request;
+opening or refreshing the dashboard does not automatically call OpenRouter.
+
+Green **Connection verified** means the model returned an answer. Other statuses
+identify a missing key, authentication/access failure, rate limit, network timeout,
+or missing final answer. A successful connection does not validate lecture JSON
+extraction; the existing analyzer still has its demo fallback.
+
+Run the offline diagnostic tests with `jac test tests/test_openrouter_status.jac`.
