@@ -4,31 +4,37 @@ import { api } from '../api/client';
 import { AnalyticsData } from '../types';
 
 interface Props {
+  subjectName: string;
   onBack: () => void;
 }
 
-export const AnalyticsScreen: React.FC<Props> = ({ onBack }) => {
+export const AnalyticsScreen: React.FC<Props> = ({ subjectName, onBack }) => {
   const [data, setData] = useState<AnalyticsData | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchAnalytics = async () => {
       try {
-        const res = await api.getAnalytics('Computer Networks');
+        if (!subjectName) throw new Error('No lecture subject is loaded.');
+        const res = await api.getAnalytics(subjectName);
         setData(res);
         setLoading(false);
       } catch (e) {
         console.error(e);
+        setError(e instanceof Error ? e.message : 'Could not load analytics.');
+        setLoading(false);
       }
     };
     fetchAnalytics();
-  }, []);
+  }, [subjectName]);
 
   if (loading || !data) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color="#6366F1" />
-        <Text style={styles.loadingText}>Loading memory analytics...</Text>
+        {error ? <Text style={styles.errorText}>{error}</Text> : <ActivityIndicator size="large" color="#6366F1" />}
+        {!error && <Text style={styles.loadingText}>Loading memory analytics...</Text>}
+        {error && <TouchableOpacity style={styles.backAction} onPress={onBack}><Text style={styles.backActionText}>Return</Text></TouchableOpacity>}
       </View>
     );
   }
@@ -143,6 +149,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B0F19', padding: 16 },
   center: { justifyContent: 'center', alignItems: 'center' },
   loadingText: { color: '#C7D2FE', marginTop: 12 },
+  errorText: { color: '#FCA5A5', backgroundColor: '#450A0A', padding: 12, borderRadius: 10, textAlign: 'center' },
+  backAction: { backgroundColor: '#6366F1', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 10, marginTop: 16 },
+  backActionText: { color: '#FFFFFF', fontWeight: '700' },
   backBtn: { marginTop: 24, marginBottom: 12 },
   backBtnText: { color: '#818CF8', fontSize: 16, fontWeight: '700' },
   pageTitle: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },

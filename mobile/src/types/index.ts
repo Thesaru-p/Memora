@@ -36,6 +36,7 @@ export interface QuizQuestion {
   correct_answer: string;
   explanation: string;
   time_limit_seconds: number;
+  generation_source: 'llm';
 }
 
 export interface QuizPayload {

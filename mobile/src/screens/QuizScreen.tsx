@@ -6,25 +6,29 @@ import { QuizPayload, QuizQuestion, StudentSubmissionItem, QuizEvaluationResult 
 interface Props {
   onBack: () => void;
   onFinishQuiz: (result: QuizEvaluationResult) => void;
+  subjectName: string;
 }
 
-export const QuizScreen: React.FC<Props> = ({ onBack, onFinishQuiz }) => {
+export const QuizScreen: React.FC<Props> = ({ onBack, onFinishQuiz, subjectName }) => {
   const [quiz, setQuiz] = useState<QuizPayload | null>(null);
   const [currentIndex, setCurrentIndex] = useState(0);
   const [selectedOption, setSelectedOption] = useState<string | null>(null);
   const [submissions, setSubmissions] = useState<StudentSubmissionItem[]>([]);
   const [timeLeft, setTimeLeft] = useState(45);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
   const [submitting, setSubmitting] = useState(false);
 
   useEffect(() => {
     const fetchQuizData = async () => {
       try {
-        const res = await api.getQuiz('Computer Networks');
+        const res = await api.getQuiz(subjectName);
         setQuiz(res);
         setLoading(false);
       } catch (e) {
         console.error(e);
+        setError('The AI quiz could not be generated. Please upload a lecture and try again.');
+        setLoading(false);
       }
     };
     fetchQuizData();
@@ -80,7 +84,18 @@ export const QuizScreen: React.FC<Props> = ({ onBack, onFinishQuiz }) => {
     return (
       <View style={[styles.container, styles.center]}>
         <ActivityIndicator size="large" color="#6366F1" />
-        <Text style={styles.loadingText}>Generating 3-min micro-quiz...</Text>
+        <Text style={styles.loadingText}>Generating an AI quiz from your lecture...</Text>
+      </View>
+    );
+  }
+
+  if (error) {
+    return (
+      <View style={[styles.container, styles.center]}>
+        <Text style={styles.errorText}>{error}</Text>
+        <TouchableOpacity style={styles.backBtn} onPress={onBack}>
+          <Text style={styles.backBtnText}>Return to Dashboard</Text>
+        </TouchableOpacity>
       </View>
     );
   }
@@ -113,13 +128,24 @@ export const QuizScreen: React.FC<Props> = ({ onBack, onFinishQuiz }) => {
         </View>
       </View>
 
+      <View style={styles.progressTrack}>
+        <View style={[styles.progressFill, { width: `${((currentIndex + 1) / quiz.questions.length) * 100}%` }]} />
+      </View>
+
+      <View style={styles.coachHint}>
+        <Text style={styles.coachHintIcon}>🧠</Text>
+        <Text style={styles.coachHintText}>Trust your first recall. This quiz is here to strengthen memory, not judge you.</Text>
+      </View>
+
       {/* Concept Tag */}
       <View style={styles.tagRow}>
-        <Text style={styles.conceptTag}>{currentQ.concept_name}</Text>
+        <Text style={styles.conceptTag}>REVIEWING · {currentQ.concept_name}</Text>
+        <Text style={styles.sourceTag}>✨ Generated from your lecture by AI</Text>
       </View>
 
       {/* Prompt Card */}
       <View style={styles.promptCard}>
+        <Text style={styles.promptLabel}>Question {currentIndex + 1}</Text>
         <Text style={styles.promptText}>{currentQ.prompt}</Text>
       </View>
 
@@ -149,7 +175,7 @@ export const QuizScreen: React.FC<Props> = ({ onBack, onFinishQuiz }) => {
         onPress={() => handleNext(selectedOption || '')}
       >
         <Text style={styles.confirmBtnText}>
-          {currentIndex + 1 === quiz.questions.length ? 'Submit Quiz' : 'Next Question →'}
+          {currentIndex + 1 === quiz.questions.length ? 'Finish review' : 'Continue →'}
         </Text>
       </TouchableOpacity>
     </ScrollView>
@@ -164,9 +190,16 @@ const styles = StyleSheet.create({
   progressCounter: { color: '#E2E8F0', fontSize: 14, fontWeight: '700' },
   timerPill: { backgroundColor: '#1E1B4B', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#6366F1' },
   timerText: { color: '#818CF8', fontWeight: '800', fontSize: 13 },
+  progressTrack: { height: 6, backgroundColor: '#1E293B', borderRadius: 3, overflow: 'hidden', marginBottom: 16 },
+  progressFill: { height: '100%', backgroundColor: '#818CF8', borderRadius: 3 },
+  coachHint: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#172554', borderRadius: 12, padding: 11, marginBottom: 16 },
+  coachHintIcon: { fontSize: 18, marginRight: 8 },
+  coachHintText: { flex: 1, color: '#C7D2FE', fontSize: 11, lineHeight: 16 },
   tagRow: { marginBottom: 12 },
   conceptTag: { color: '#A5B4FC', backgroundColor: '#312E81', alignSelf: 'flex-start', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6, fontSize: 11, fontWeight: '700' },
+  sourceTag: { color: '#A7F3D0', fontSize: 11, fontWeight: '700', marginTop: 6 },
   promptCard: { backgroundColor: '#1E293B', borderRadius: 14, padding: 18, marginBottom: 20 },
+  promptLabel: { color: '#818CF8', fontSize: 11, fontWeight: '800', letterSpacing: 1, marginBottom: 8 },
   promptText: { color: '#FFFFFF', fontSize: 17, fontWeight: '700', lineHeight: 24 },
   optionsList: { marginBottom: 24 },
   optionItem: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#1E293B', borderRadius: 12, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#334155' },

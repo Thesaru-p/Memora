@@ -56,21 +56,24 @@ Memora/
 Ensure `jaclang` is installed (`pip install jaclang`):
 
 ```bash
+# Install Jac's LLM delegation runtime once
+jac install byllm
+
 # Verify Jac version
 jac --version
 
-# Run the Jac multi-agent backend entrypoint
-jac run main.jac
+# Run the Jac multi-agent backend entrypoint (loads .env first on Windows)
+.\tools\run_jac.ps1 run main.jac
 
 # Run backend REST API server (exposing public walkers)
-jac start main.jac
+.\tools\run_jac.ps1 start main.jac
 ```
 
 ### 2. Running Automated Jac Tests
 ```bash
 # Run all unit tests
-jac test tests/test_forgetting_curve.jac
-jac test tests/test_graph.jac
+.\tools\run_jac.ps1 test tests/test_forgetting_curve.jac
+.\tools\run_jac.ps1 test tests/test_graph.jac
 ```
 
 ### 3. Mobile App Setup (Dev 1)
@@ -96,6 +99,31 @@ The Jac backend exposes the following public walkers for the mobile client:
 | `POST /walker/get_graph_data` | POST | Supplies nodes and edges for the mobile visual concept map |
 | `POST /walker/get_analytics` | POST | Returns historical Ebbinghaus retention curve coordinates and test trends |
 | `POST /walker/get_notifications`| POST | Delivers Day-1 alerts and review reminders |
+
+## ✅ Features implemented so far
+
+Memora currently demonstrates the complete learning loop with a Jac backend and a temporary Expo mobile UI:
+
+- Lecture notes can be entered and sent to the `ingest_lecture` walker.
+- Lecture content is represented as structured concepts with summaries, rules, difficulty, and prerequisites.
+- Concepts are organized in a persistent Object-Spatial knowledge graph.
+- The dashboard shows retention health, active concepts, study streak, and the next review topic.
+- Fading concepts can be prioritized for a short 3–4 minute quiz.
+- The quiz flow supports timed multiple-choice questions and answer submission.
+- Quiz results show accuracy, missed answers, explanations, and recalibrated concept stability.
+- Ebbinghaus retention, review intervals, notification urgency, and mastery calculations are implemented as deterministic Jac logic.
+- Analytics exposes retention-curve points, quiz history, mastery distribution, and estimated time saved.
+- The mobile client includes fallback demo data, so the full UI flow can be previewed without a running backend.
+
+### LLM integration status
+
+The project is configured for OpenRouter through `OPENROUTER_API_KEY`, `OPENROUTER_BASE_URL`, and `REASONING_MODEL` in `jac.toml`. The intended LLM roles are:
+
+- **Lecture analysis:** extract concepts, summaries, formulas, and prerequisites from notes or images.
+- **Quiz generation:** create grounded MCQs and active-recall questions with distractors.
+- **Evaluation support:** explain misconceptions and assist with semantic grading.
+
+The live paths are now wired through `by llm()` for lecture concept extraction, quiz-question generation, and misconception explanations. Deterministic seeded responses remain as a safe per-call fallback, so the UI and walker contracts still work if a model response is unavailable.
 
 ---
 

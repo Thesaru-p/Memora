@@ -13,6 +13,7 @@ type Screen = 'DASHBOARD' | 'UPLOAD' | 'QUIZ' | 'RESULTS' | 'ANALYTICS' | 'GRAPH
 export default function App() {
   const [currentScreen, setCurrentScreen] = useState<Screen>('DASHBOARD');
   const [lastQuizResult, setLastQuizResult] = useState<QuizEvaluationResult | null>(null);
+  const [activeSubject, setActiveSubject] = useState('');
 
   const handleFinishQuiz = (result: QuizEvaluationResult) => {
     setLastQuizResult(result);
@@ -25,6 +26,7 @@ export default function App() {
       <View style={styles.container}>
         {currentScreen === 'DASHBOARD' && (
           <DashboardScreen
+            subjectName={activeSubject}
             onStartQuiz={() => setCurrentScreen('QUIZ')}
             onOpenUpload={() => setCurrentScreen('UPLOAD')}
             onOpenGraph={() => setCurrentScreen('GRAPH')}
@@ -35,7 +37,10 @@ export default function App() {
         {currentScreen === 'UPLOAD' && (
           <LectureUploadScreen
             onBack={() => setCurrentScreen('DASHBOARD')}
-            onSuccess={() => setCurrentScreen('DASHBOARD')}
+            onSuccess={(subjectName) => {
+              setActiveSubject(subjectName);
+              setCurrentScreen('DASHBOARD');
+            }}
           />
         )}
 
@@ -43,6 +48,7 @@ export default function App() {
           <QuizScreen
             onBack={() => setCurrentScreen('DASHBOARD')}
             onFinishQuiz={handleFinishQuiz}
+            subjectName={activeSubject}
           />
         )}
 
@@ -55,11 +61,11 @@ export default function App() {
         )}
 
         {currentScreen === 'ANALYTICS' && (
-          <AnalyticsScreen onBack={() => setCurrentScreen('DASHBOARD')} />
+          <AnalyticsScreen subjectName={activeSubject} onBack={() => setCurrentScreen('DASHBOARD')} />
         )}
 
         {currentScreen === 'GRAPH' && (
-          <KnowledgeGraphScreen onBack={() => setCurrentScreen('DASHBOARD')} />
+          <KnowledgeGraphScreen subjectName={activeSubject} onBack={() => setCurrentScreen('DASHBOARD')} />
         )}
       </View>
     </SafeAreaView>

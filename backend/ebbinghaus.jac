@@ -39,9 +39,25 @@ def update_stability(curr_stability: float, grade: float, curr_retrievability: f
         safe_diff = difficulty;
     }
 
-    if grade >= 0.7 {
+    safe_grade: float = grade;
+    if safe_grade < 0.0 {
+        safe_grade = 0.0;
+    }
+    if safe_grade > 1.0 {
+        safe_grade = 1.0;
+    }
+
+    safe_retrievability: float = curr_retrievability;
+    if safe_retrievability < 0.0 {
+        safe_retrievability = 0.0;
+    }
+    if safe_retrievability > 1.0 {
+        safe_retrievability = 1.0;
+    }
+
+    if safe_grade >= 0.7 {
         difficulty_factor = (11.0 - safe_diff) / 10.0;
-        bonus = 1.5 * (1.0 - curr_retrievability) * difficulty_factor;
+        bonus = 1.5 * (1.0 - safe_retrievability) * difficulty_factor;
         multiplier: float = 1.8 + bonus;
         if multiplier > 3.5 {
             multiplier = 3.5;

@@ -1,0 +1,242 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Memora Cognitive Engine Debug UI</title>
+  <style>
+    :root { color-scheme: dark; font-family: system-ui, sans-serif; }
+    body { max-width: 760px; margin: 0 auto; padding: 24px; background: #0b0f19; color: #e2e8f0; }
+    h1 { margin-bottom: 6px; }
+    p { color: #94a3b8; }
+    .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 12px; }
+    label { display: grid; gap: 6px; color: #cbd5e1; font-size: 13px; }
+    input { padding: 10px; border: 1px solid #334155; border-radius: 8px; background: #1e293b; color: #fff; }
+    .card { margin-top: 18px; padding: 18px; border: 1px solid #334155; border-radius: 12px; background: #111827; }
+    .metric { font-size: 28px; font-weight: 800; color: #a5b4fc; }
+    .strong { color: #34d399; } .fading { color: #fbbf24; } .critical { color: #f87171; }
+    code { color: #c7d2fe; }
+    textarea { width: 100%; min-height: 190px; box-sizing: border-box; padding: 12px; border: 1px solid #334155; border-radius: 8px; background: #1e293b; color: #fff; font: 13px ui-monospace, monospace; }
+    select { padding: 10px; border: 1px solid #334155; border-radius: 8px; background: #1e293b; color: #fff; }
+    button { margin-top: 12px; padding: 10px 14px; border: 0; border-radius: 8px; background: #6366f1; color: white; font-weight: 700; cursor: pointer; }
+    ol { padding-left: 24px; } li { margin: 10px 0; } .error { color: #f87171; }
+  </style>
+</head>
+<body>
+  <h1>Memora Cognitive Engine</h1>
+  <p>Temporary manual UI for checking the Ebbinghaus calculations before the Jac API is connected.</p>
+
+  <div class="grid">
+    <label>Stability S (days)<input id="stability" type="number" min="0" step="0.1" value="1"></label>
+    <label>Elapsed time (days)<input id="elapsed" type="number" min="0" step="0.1" value="1"></label>
+    <label>Quiz grade (0-1)<input id="grade" type="number" min="0" max="1" step="0.05" value="0.8"></label>
+    <label>Difficulty (1-10)<input id="difficulty" type="number" min="1" max="10" step="0.5" value="5"></label>
+  </div>
+
+  <div class="card">
+    <div>Retrievability <code>R = exp(-t / S)</code></div>
+    <div id="retention" class="metric"></div>
+    <div id="status"></div>
+  </div>
+
+  <div class="card">
+    <div>After quiz recalibration</div>
+    <div id="newStability" class="metric"></div>
+    <div id="nextReview"></div>
+  </div>
+
+  <div class="card">
+    <h2>Quiz Planner Debugger</h2>
+    <p>Enter concept data as JSON. The planner ranks critical, new, fading, and overdue concepts first, then returns up to five concepts.</p>
+    <label>Current time (Unix seconds)<textarea id="concepts">[
+  {"id":"c1","name":"Subnetting","status":"CRITICAL","retrievability":0.35,"next_review_due":0},
+  {"id":"c2","name":"CIDR","status":"FADING","retrievability":0.62,"next_review_due":1700000000},
+  {"id":"c3","name":"Routing","status":"NEW","retrievability":1.0,"next_review_due":0},
+  {"id":"c4","name":"TCP","status":"STRONG","retrievability":0.91,"next_review_due":1699990000},
+  {"id":"c5","name":"DNS","status":"FADING","retrievability":0.70,"next_review_due":1699995000},
+  {"id":"c6","name":"HTTP","status":"FADING","retrievability":0.78,"next_review_due":0}
+]</textarea></label>
+    <label>Planner time (Unix seconds)<input id="plannerNow" type="number" step="1" value="1700000000"></label>
+    <button id="planButton" type="button">Rank Quiz Concepts</button>
+    <div id="plannerError" class="error"></div>
+    <ol id="plannerResults"></ol>
+  </div>
+
+  <div class="card">
+    <h2>Quiz Generator Debugger</h2>
+    <p>Generate deterministic grounded questions for the concepts selected by the planner.</p>
+    <label>Concepts to generate<textarea id="generatorConcepts">[
+  {"id":"c_cidr_notation","name":"CIDR Notation","summary":"Slash prefix notation for IP networks.","formula":"/20 = 255.255.240.0"},
+  {"id":"c_custom","name":"Custom Concept","summary":"A concept summary from lecture notes.","formula":""}
+]</textarea></label>
+    <button id="generateButton" type="button">Generate Questions</button>
+    <div id="generatorError" class="error"></div>
+    <div id="generatorResults"></div>
+  </div>
+
+  <div class="card">
+    <h2>Review Scheduler Debugger</h2>
+    <p>Check whether a concept should produce a day-one or spaced-review notification.</p>
+    <div class="grid">
+      <label>Review count<input id="reviewCount" type="number" min="0" step="1" value="1"></label>
+      <label>Last reviewed (Unix seconds)<input id="lastReviewed" type="number" min="0" step="1" value="1699913600"></label>
+      <label>Next review due (Unix seconds)<input id="nextReviewDue" type="number" min="0" step="1" value="1700000000"></label>
+      <label>Current time (Unix seconds)<input id="schedulerNow" type="number" min="0" step="1" value="1700000000"></label>
+    </div>
+    <label>Concept status<select id="schedulerStatus"><option>CRITICAL</option><option>FADING</option><option>NEW</option><option>STRONG</option></select></label>
+    <button id="scheduleButton" type="button">Check Notification</button>
+    <div id="schedulerError" class="error"></div>
+    <div id="schedulerResult" class="metric"></div>
+    <div id="schedulerDetails"></div>
+  </div>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const number = (id) => Number($(id).value);
+
+    function retrievability(stability, elapsed) {
+      if (stability <= 0) return 0;
+      if (elapsed <= 0) return 1;
+      return Math.max(0.01, Math.min(1, Math.exp(-elapsed / stability)));
+    }
+
+    function status(retention) {
+      if (retention >= 0.85) return ['STRONG', 'strong'];
+      if (retention >= 0.60) return ['FADING', 'fading'];
+      return ['CRITICAL', 'critical'];
+    }
+
+    function nextReview(stability) {
+      return Math.max(0.5, -stability * Math.log(0.75));
+    }
+
+    function conceptPriority(concept, now) {
+      const base = { CRITICAL: 300, NEW: 250, FADING: 200, STRONG: 100 }[concept.status] || 100;
+      const retentionScore = (1 - Math.max(0, Math.min(1, concept.retrievability))) * 100;
+      let overdueScore = 0;
+      if (concept.next_review_due > 0 && now > concept.next_review_due) {
+        overdueScore = Math.min(100, (now - concept.next_review_due) / 3600);
+      }
+      return base + retentionScore + overdueScore;
+    }
+
+    function generateQuestion(concept, index) {
+      const seeded = {
+        c_cidr_notation: {
+          prompt: 'Which subnet mask is equivalent to /20 prefix notation?',
+          options: ['255.255.240.0', '255.255.255.0', '255.255.224.0', '255.240.0.0'],
+          answer: '255.255.240.0',
+          explanation: 'A /20 prefix uses 4 bits in the third octet, giving 128 + 64 + 32 + 16 = 240.'
+        }
+      }[concept.id];
+      if (seeded) return { ...seeded, id: `quiz_debug_${index}_${concept.id}` };
+      const answer = concept.summary || concept.formula || `Review the core idea of ${concept.name}.`;
+      return {
+        id: `quiz_debug_${index}_${concept.id}`,
+        prompt: `Which statement best describes ${concept.name}?`,
+        options: [answer, `This concept is unrelated to ${concept.name}.`, 'It has no practical use.', 'It should always be ignored.'],
+        answer,
+        explanation: `The answer is grounded in the stored concept content: ${answer}`
+      };
+    }
+
+    function generateQuestions() {
+      const error = $('generatorError');
+      const results = $('generatorResults');
+      error.textContent = '';
+      results.innerHTML = '';
+      try {
+        const concepts = JSON.parse($('generatorConcepts').value);
+        if (!Array.isArray(concepts) || concepts.length === 0) throw new Error('Enter a non-empty concept array.');
+        concepts.slice(0, 5).forEach((concept, index) => {
+          const question = generateQuestion(concept, index + 1);
+          const card = document.createElement('div');
+          card.className = 'card';
+          card.innerHTML = `<strong>${index + 1}. ${question.prompt}</strong><ol>${question.options.map((option) => `<li>${option}</li>`).join('')}</ol><p><strong>Answer:</strong> ${question.answer}</p><p><strong>Explanation:</strong> ${question.explanation}</p>`;
+          results.appendChild(card);
+        });
+      } catch (err) {
+        error.textContent = `Generator input error: ${err.message}`;
+      }
+    }
+
+    function rankConcepts() {
+      const error = $('plannerError');
+      const results = $('plannerResults');
+      error.textContent = '';
+      results.innerHTML = '';
+      try {
+        const concepts = JSON.parse($('concepts').value);
+        const now = Number($('plannerNow').value);
+        if (!Array.isArray(concepts) || concepts.length === 0) throw new Error('Enter a non-empty concept array.');
+        const ranked = concepts
+          .map((concept) => ({ ...concept, priority: conceptPriority(concept, now) }))
+          .sort((a, b) => b.priority - a.priority)
+          .slice(0, 5);
+        ranked.forEach((concept) => {
+          const item = document.createElement('li');
+          item.innerHTML = `<strong>${concept.name || concept.id}</strong> — ${concept.status}, ${(concept.retrievability * 100).toFixed(1)}% retention, priority ${concept.priority.toFixed(1)}`;
+          results.appendChild(item);
+        });
+      } catch (err) {
+        error.textContent = `Planner input error: ${err.message}`;
+      }
+    }
+
+    function checkNotification() {
+      const error = $('schedulerError');
+      error.textContent = '';
+      try {
+        const reviewCount = Number($('reviewCount').value);
+        const lastReviewed = Number($('lastReviewed').value);
+        const nextReviewDue = Number($('nextReviewDue').value);
+        const now = Number($('schedulerNow').value);
+        const statusValue = $('schedulerStatus').value;
+        if ([reviewCount, lastReviewed, nextReviewDue, now].some((value) => !Number.isFinite(value) || value < 0)) throw new Error('Enter valid non-negative numeric values.');
+        let kind = '';
+        if (reviewCount === 0 && lastReviewed > 0 && now - lastReviewed >= 86400) kind = 'DAY_1_EBBINGHAUS_ALERT';
+        else if (nextReviewDue > 0 && nextReviewDue <= now) kind = 'SPACED_REVIEW_DUE';
+        const urgency = statusValue === 'CRITICAL' ? 'HIGH' : (statusValue === 'FADING' || statusValue === 'NEW' ? 'WARN' : 'INFO');
+        $('schedulerResult').textContent = kind || 'No notification due';
+        $('schedulerDetails').textContent = kind ? `Urgency: ${urgency} · Status: ${statusValue}` : 'The concept is not currently due for review.';
+      } catch (err) {
+        $('schedulerResult').textContent = '';
+        $('schedulerDetails').textContent = '';
+        error.textContent = `Scheduler input error: ${err.message}`;
+      }
+    }
+
+    function update() {
+      const stability = Math.max(0.5, number('stability'));
+      const elapsed = number('elapsed');
+      const grade = Math.max(0, Math.min(1, number('grade')));
+      const difficulty = Math.max(1, Math.min(10, number('difficulty')));
+      const retention = retrievability(stability, elapsed);
+      const [label, css] = status(retention);
+
+      let newStability;
+      if (grade >= 0.7) {
+        const factor = (11 - difficulty) / 10;
+        newStability = stability * Math.min(3.5, 1.8 + 1.5 * (1 - retention) * factor);
+      } else {
+        newStability = Math.max(1, stability * 0.5);
+      }
+
+      $('retention').textContent = `${(retention * 100).toFixed(1)}%`;
+      $('status').textContent = label;
+      $('status').className = css;
+      $('newStability').textContent = `${newStability.toFixed(2)} days`;
+      $('nextReview').textContent = `Next review in approximately ${nextReview(newStability).toFixed(2)} days`;
+    }
+
+    document.querySelectorAll('input').forEach((input) => input.addEventListener('input', update));
+    $('planButton').addEventListener('click', rankConcepts);
+    $('generateButton').addEventListener('click', generateQuestions);
+    $('scheduleButton').addEventListener('click', checkNotification);
+    update();
+    rankConcepts();
+    generateQuestions();
+    checkNotification();
+  </script>
+</body>
+</html>

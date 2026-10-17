@@ -15,19 +15,19 @@ export const QuizResultsScreen: React.FC<Props> = ({ result, onDone, onOpenAnaly
     <ScrollView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <Text style={styles.title}>Quiz Evaluation & Debrief</Text>
-        <Text style={styles.subtitle}>Ebbinghaus Memory Recalibration Report</Text>
+        <Text style={styles.title}>Nice work — review complete</Text>
+        <Text style={styles.subtitle}>Here is what your study coach learned from this session.</Text>
       </View>
 
       {/* Score Summary Card */}
       <View style={[styles.scoreCard, isPassing ? styles.scoreCardSuccess : styles.scoreCardNeedsWork]}>
-        <Text style={styles.scoreLabel}>ACCURACY</Text>
+        <Text style={styles.scoreLabel}>YOUR RECALL SCORE</Text>
         <Text style={styles.scoreNumber}>{Math.round(result.accuracy_pct)}%</Text>
         <Text style={styles.scoreDetail}>
           {result.correct_items} of {result.total_items} questions answered correctly
         </Text>
         <Text style={styles.statusPill}>
-          {isPassing ? '🎉 RETENTION REFRESHED (+Stability Boost)' : '⚠️ Fading Risk Detected'}
+          {isPassing ? '🎉 Memory refreshed · stability boosted' : '⚠️ A few concepts need another look'}
         </Text>
       </View>
 
@@ -35,10 +35,10 @@ export const QuizResultsScreen: React.FC<Props> = ({ result, onDone, onOpenAnaly
       {result.missed_explanations && result.missed_explanations.length > 0 ? (
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>
-            MISSED QUESTIONS &amp; EXPLANATIONS ({result.missed_explanations.length})
+            LEARN FROM THESE ({result.missed_explanations.length})
           </Text>
           <Text style={styles.sectionSubtitle}>
-            Review these concepts to fix misconceptions before the next review window.
+            A short explanation now makes the next recall easier.
           </Text>
 
           {result.missed_explanations.map((item, idx) => (
@@ -78,9 +78,9 @@ export const QuizResultsScreen: React.FC<Props> = ({ result, onDone, onOpenAnaly
       {/* Section 2: Calibrated Concept Nodes in Jac Graph */}
       {result.recalibrated_concepts && result.recalibrated_concepts.length > 0 && (
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>KNOWLEDGE GRAPH CALIBRATION</Text>
+          <Text style={styles.sectionTitle}>YOUR REVIEW PLAN UPDATED</Text>
           <Text style={styles.sectionSubtitle}>
-            Memory stability parameters updated in-place across Jac concept nodes:
+            Memora adjusted stability and the next review date for these concepts:
           </Text>
 
           {result.recalibrated_concepts.map((concept, idx) => (
@@ -114,10 +114,10 @@ export const QuizResultsScreen: React.FC<Props> = ({ result, onDone, onOpenAnaly
       {/* Action Buttons */}
       <View style={styles.btnRow}>
         <TouchableOpacity style={styles.analyticsBtn} onPress={onOpenAnalytics}>
-          <Text style={styles.analyticsBtnText}>📈 View Retention Trends</Text>
+          <Text style={styles.analyticsBtnText}>📈 See my progress</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.doneBtn} onPress={onDone}>
-          <Text style={styles.doneBtnText}>Return to Dashboard</Text>
+          <Text style={styles.doneBtnText}>Back to my dashboard</Text>
         </TouchableOpacity>
       </View>
     </ScrollView>

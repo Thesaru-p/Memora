@@ -1,10 +1,9 @@
 # Lecture Analyzer Agent (Dev 2 Domain)
-# Uses by llm() via OpenRouter (nvidia/nemotron-3.5-super-vl:free)
+# Uses byllm via OpenRouter for text concept extraction. The configured vision
+# model remains reserved for the upcoming image-input path.
 # to analyze lecture content (text, slide OCR, notes) and extract atomic concepts.
 
-# When mtllm plugin is installed (pip install mtllm):
-# import from mtllm.llms { OpenAI }
-# glob analyzer_llm = OpenAI(model_name="nvidia/nemotron-3.5-super-vl:free", api_base="https://openrouter.ai/api/v1");
+import from backend.llm_config { lecture_llm }
 
 # Structured concept definition extracted from lecture notes
 obj RawExtractedConcept {
@@ -15,39 +14,17 @@ obj RawExtractedConcept {
     has prerequisites: list[str] = [];
 }
 
-# Meaning-Typed LLM function for extracting concepts from lecture material
+# Live Meaning-Typed LLM function. The return type makes the model response
+# structured and directly usable by the graph builder.
+def extract_concepts_with_llm(lecture_title: str, notes_content: str) -> list[RawExtractedConcept] by lecture_llm();
+sem extract_concepts_with_llm = "Extract 3 to 8 atomic learning concepts from the lecture. Return only concepts grounded in the supplied material. For each concept provide a concise summary, any formula or rule, difficulty from 1 to 10, and prerequisite concept names. Do not invent facts that are not supported by the notes.";
+
+# Public analyzer entrypoint. If the model fails, the error propagates to the
+# UI; never substitute unrelated seeded concepts for the user's lecture.
 def extract_concepts_from_text(lecture_title: str, notes_content: str) -> list[RawExtractedConcept] {
-    # Default high-fidelity extractor for Computer Networks
-    # When OpenRouter key is provided with mtllm, this executes via by llm()
-    concepts: list[RawExtractedConcept] = [
-        RawExtractedConcept(
-            name="IP Addressing & Subnetting",
-            summary="Hierarchical addressing scheme using network prefix and host identifier.",
-            formula_or_rule="Host Capacity = 2^(32 - Prefix) - 2",
-            difficulty=6.0,
-            prerequisites=[]
-        ),
-        RawExtractedConcept(
-            name="CIDR Notation",
-            summary="Classless Inter-Domain Routing replaces traditional A/B/C classes with slash prefix notation.",
-            formula_or_rule="/24 indicates 24 network bits and 8 host bits",
-            difficulty=5.0,
-            prerequisites=["IP Addressing & Subnetting"]
-        ),
-        RawExtractedConcept(
-            name="Subnet Masks & ANDing",
-            summary="Bitwise logical AND operation between IP address and subnet mask determines the Network Address.",
-            formula_or_rule="Network Address = IP & Subnet Mask",
-            difficulty=7.0,
-            prerequisites=["IP Addressing & Subnetting", "CIDR Notation"]
-        ),
-        RawExtractedConcept(
-            name="Default Gateway",
-            summary="The routing interface that forwards packets destined outside the local broadcast domain.",
-            formula_or_rule="Packets matching local subnet are delivered via ARP; external packets go to Gateway.",
-            difficulty=4.0,
-            prerequisites=["Subnet Masks & ANDing"]
-        )
-    ];
+    concepts = extract_concepts_with_llm(lecture_title, notes_content);
+    if len(concepts) == 0 {
+        raise Exception("The lecture model returned no concepts.");
+    }
     return concepts;
 }

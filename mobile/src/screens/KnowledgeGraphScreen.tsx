@@ -4,18 +4,21 @@ import { api } from '../api/client';
 import { KnowledgeGraphData, GraphNode } from '../types';
 
 interface Props {
+  subjectName: string;
   onBack: () => void;
 }
 
-export const KnowledgeGraphScreen: React.FC<Props> = ({ onBack }) => {
+export const KnowledgeGraphScreen: React.FC<Props> = ({ subjectName, onBack }) => {
   const [graphData, setGraphData] = useState<KnowledgeGraphData | null>(null);
   const [selectedNode, setSelectedNode] = useState<GraphNode | null>(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
 
   useEffect(() => {
     const fetchGraph = async () => {
       try {
-        const res = await api.getGraphData('Computer Networks');
+        if (!subjectName) throw new Error('No lecture subject is loaded.');
+        const res = await api.getGraphData(subjectName);
         setGraphData(res);
         if (res.nodes.length > 0) {
           setSelectedNode(res.nodes[0]);
@@ -23,16 +26,19 @@ export const KnowledgeGraphScreen: React.FC<Props> = ({ onBack }) => {
         setLoading(false);
       } catch (e) {
         console.error(e);
+        setError(e instanceof Error ? e.message : 'Could not load the knowledge graph.');
+        setLoading(false);
       }
     };
     fetchGraph();
-  }, []);
+  }, [subjectName]);
 
   if (loading || !graphData) {
     return (
       <View style={[styles.container, styles.center]}>
-        <ActivityIndicator size="large" color="#6366F1" />
-        <Text style={styles.loadingText}>Fetching Object-Spatial Knowledge Graph...</Text>
+        {error ? <Text style={styles.errorText}>{error}</Text> : <ActivityIndicator size="large" color="#6366F1" />}
+        {!error && <Text style={styles.loadingText}>Fetching Object-Spatial Knowledge Graph...</Text>}
+        {error && <TouchableOpacity style={styles.backAction} onPress={onBack}><Text style={styles.backActionText}>Return</Text></TouchableOpacity>}
       </View>
     );
   }
@@ -139,6 +145,9 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#0B0F19', padding: 16 },
   center: { justifyContent: 'center', alignItems: 'center' },
   loadingText: { color: '#C7D2FE', marginTop: 12 },
+  errorText: { color: '#FCA5A5', backgroundColor: '#450A0A', padding: 12, borderRadius: 10, textAlign: 'center' },
+  backAction: { backgroundColor: '#6366F1', paddingVertical: 12, paddingHorizontal: 18, borderRadius: 10, marginTop: 16 },
+  backActionText: { color: '#FFFFFF', fontWeight: '700' },
   backBtn: { marginTop: 24, marginBottom: 12 },
   backBtnText: { color: '#818CF8', fontSize: 16, fontWeight: '700' },
   pageTitle: { fontSize: 22, fontWeight: '800', color: '#FFFFFF' },

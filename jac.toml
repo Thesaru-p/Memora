@@ -2,5 +2,16 @@
 name = "memora"
 kind = "cli"
 
+[dependencies]
+byllm = ">=0.6.19"
+
 [run]
 diagnostics = "error"
+
+[byllm.model]
+default_model = "openrouter/${REASONING_MODEL}"
+api_key = "${OPENROUTER_API_KEY}"
+base_url = "${OPENROUTER_BASE_URL}"
+
+[byllm.call_params]
+max_output_retries = 2
