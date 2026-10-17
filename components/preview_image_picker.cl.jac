@@ -10,20 +10,40 @@ def:pub PreviewImagePicker(onSelected: any) -> JsxElement {
         if not files or files.length == 0 {
             return;
         }
-        file: any = files[0];
-        if not str(file.type).startswith("image/") or file.size > 5242880 {
-            onSelected("", str(file.name), int(file.size), str(file.type));
-            return;
+
+        files_len: int = int(files.length);
+        reader_type: any = (window as any).FileReader;
+        loaded_items: list[any] = [];
+
+        def read_next(idx: int) -> None {
+            if idx >= files_len {
+                if len(loaded_items) > 0 {
+                    first = loaded_items[0];
+                    onSelected(first["encoded"], first["name"], first["size"], first["mime_type"], loaded_items);
+                }
+                return;
+            }
+            f: any = files[idx];
+            if not str(f.type).startswith("image/") or f.size > 5242880 {
+                read_next(idx + 1);
+                return;
+            }
+            reader: BrowserFileReader = new(reader_type as type[BrowserFileReader]);
+            reader.onload = lambda (load_event: any) -> None {
+                data_url = str(load_event.target.result);
+                encoded = data_url.split(",")[1] if "," in data_url else "";
+                loaded_items.append({
+                    "encoded": encoded,
+                    "name": str(f.name),
+                    "size": int(f.size),
+                    "mime_type": str(f.type)
+                });
+                read_next(idx + 1);
+            };
+            reader.readAsDataURL(f);
         }
 
-        reader_type: any = (window as any).FileReader;
-        reader: BrowserFileReader = new(reader_type as type[BrowserFileReader]);
-        reader.onload = lambda (load_event: any) -> None {
-            data_url = str(load_event.target.result);
-            encoded = data_url.split(",")[1] if "," in data_url else "";
-            onSelected(encoded, str(file.name), int(file.size), str(file.type));
-        };
-        reader.readAsDataURL(file);
+        read_next(0);
     }
 
     return <label style={{
@@ -36,9 +56,10 @@ def:pub PreviewImagePicker(onSelected: any) -> JsxElement {
         "textAlign": "center",
         "cursor": "pointer"
     }}>
-        Choose slide photo
+        Choose slide photo(s)
         <input
             type="file"
+            multiple={True}
             accept="image/jpeg,image/png,image/webp"
             onChange={choose_file}
             style={{"display": "none"}}

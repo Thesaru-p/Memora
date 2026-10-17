@@ -65,7 +65,7 @@ def parse_extracted_concepts(raw_response: str) -> list[RawExtractedConcept] {
     }
 }
 
-# Meaning-Typed concept extraction with OpenRouter Vision model
+# Jac's current compiler disables `by llm()` calls, so this uses the shared Jac OpenRouter client directly.
 def extract_concepts_from_text(lecture_title: str, notes_content: str, image_b64: str = "") -> list[RawExtractedConcept] {
     sys_prompt = "You are an expert cognitive learning assistant. Analyze only the supplied lecture notes or image. Return one JSON object with a concepts key containing 4-8 atomic concepts. Every concept must contain name, a one-sentence summary, formula_or_rule, difficulty from 1 to 10, and prerequisite concept names from the same response. Do not add unrelated subject matter.";
     user_prompt = f"Lecture Title: {lecture_title}\nNotes Content: {notes_content}";

@@ -11,6 +11,8 @@ import {
   ReviewSchedule
 } from '../types';
 
+declare const process: { env: { EXPO_PUBLIC_API_URL?: string } };
+
 const API_BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://localhost:8000';
 
 async function callWalker<T>(walkerName: string, payload: Record<string, any>): Promise<T> {
@@ -27,14 +29,14 @@ async function callWalker<T>(walkerName: string, payload: Record<string, any>): 
       throw new Error(`Walker ${walkerName} failed with status: ${res.status}`);
     }
 
-    const data = await res.json();
-    // Jac report responses typically live in reports[0]
+    const envelope = await res.json();
+    const data = envelope.data ?? envelope;
     if (data.reports && data.reports.length > 0) {
-      return data.reports[0] as T;
+      return data.reports[data.reports.length - 1] as T;
     }
     return data as T;
   } catch (err) {
-    console.warn(`[API Client] Walker ${walkerName} unavailable, utilizing grounded fallback.`, err);
+    console.warn(`[API Client] Walker ${walkerName} unavailable.`, err);
     throw err;
   }
 }
@@ -42,45 +44,32 @@ async function callWalker<T>(walkerName: string, payload: Record<string, any>): 
 export const api = {
   // 1. Fetch Home Dashboard overview
   async getDashboard(subjectName: string = 'Computer Networks'): Promise<DashboardData> {
-    try {
-      return await callWalker<DashboardData>('get_dashboard', { subject_name: subjectName });
-    } catch {
-      return {
-        subject_name: subjectName,
-        code: 'CS-301',
-        overall_retention_pct: 82.5,
-        active_concepts_count: 4,
-        study_streak_days: 3,
-        next_quiz_due_in_hours: 18,
-        next_quiz_topic: 'Subnet Masks & ANDing',
-        pending_quiz_available: true,
-      };
-    }
+    return callWalker<DashboardData>('get_dashboard', { subject_name: subjectName });
   },
 
   // 2. Ingest lecture notes (Text or Slide transcription)
-  async ingestLecture(subjectName: string, title: string, notesText: string) {
-    try {
-      return await callWalker('ingest_lecture', {
+  async ingestLecture(
+    subjectName: string,
+    title: string,
+    notesText: string,
+    options?: {
+      replaceExisting?: boolean;
+      imageB64?: string;
+      imagesB64?: string[];
+    }
+  ) {
+    const result: any = await callWalker('ingest_lecture', {
         subject_name: subjectName,
         lecture_title: title,
         notes_text: notesText,
+        replace_existing: options?.replaceExisting ?? false,
+        image_b64: options?.imageB64 ?? '',
+        images_b64: options?.imagesB64 ?? [],
       });
-    } catch {
-      return {
-        status: 'success',
-        subject: subjectName,
-        lecture_title: title,
-        concepts_extracted: [
-          { name: 'IP Addressing & Subnetting', summary: 'Hierarchical addressing scheme.', difficulty: 6.0 },
-          { name: 'CIDR Notation', summary: 'Slash prefix notation.', difficulty: 5.0 },
-          { name: 'Subnet Masks & ANDing', summary: 'Bitwise AND logic.', difficulty: 7.0 },
-          { name: 'Default Gateway', summary: 'Routing interface for external packets.', difficulty: 4.0 },
-        ],
-        total_concepts: 4,
-        day_1_quiz_scheduled_in_hours: 24,
-      };
+    if (result?.status !== 'success') {
+      throw new Error(result?.error || 'Lecture ingestion failed.');
     }
+    return result;
   },
 
   // 3. Get 3-4 minute micro-quiz
@@ -103,25 +92,7 @@ export const api = {
 
   // 5. Get Knowledge Graph Visualizer Data
   async getGraphData(subjectName: string = 'Computer Networks'): Promise<KnowledgeGraphData> {
-    try {
-      return await callWalker<KnowledgeGraphData>('get_graph_data', { subject_name: subjectName });
-    } catch {
-      return {
-        subject: subjectName,
-        nodes: [
-          { id: 'c_ip_addressing_and_subnetting', label: 'IP Addressing & Subnetting', status: 'STRONG', retention_pct: 92, mastery_score: 0.85, summary: 'Hierarchical addressing scheme.' },
-          { id: 'c_cidr_notation', label: 'CIDR Notation', status: 'STRONG', retention_pct: 88, mastery_score: 0.80, summary: 'Slash prefix notation.' },
-          { id: 'c_subnet_masks_and_anding', label: 'Subnet Masks & ANDing', status: 'FADING', retention_pct: 64, mastery_score: 0.60, summary: 'Bitwise AND logic.' },
-          { id: 'c_default_gateway', label: 'Default Gateway', status: 'CRITICAL', retention_pct: 48, mastery_score: 0.40, summary: 'Cross-subnet routing.' },
-        ],
-        edges: [
-          { source: 'c_cidr_notation', target: 'c_ip_addressing_and_subnetting', type: 'depends_on' },
-          { source: 'c_subnet_masks_and_anding', target: 'c_ip_addressing_and_subnetting', type: 'depends_on' },
-          { source: 'c_subnet_masks_and_anding', target: 'c_cidr_notation', type: 'depends_on' },
-          { source: 'c_default_gateway', target: 'c_subnet_masks_and_anding', type: 'depends_on' },
-        ],
-      };
-    }
+    return callWalker<KnowledgeGraphData>('get_graph_data', { subject_name: subjectName });
   },
 
   // 6. Get Analytics & Retention Trends
