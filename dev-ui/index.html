@@ -1,0 +1,169 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Memora Dev Harness</title>
+  <style>
+    :root { color-scheme: dark; font-family: Inter, system-ui, sans-serif; background: #080b14; color: #eef2ff; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top left, #1d2758 0, transparent 34rem), #080b14; }
+    main { width: min(1080px, calc(100% - 32px)); margin: auto; padding: 40px 0 64px; }
+    header { display: flex; justify-content: space-between; gap: 24px; align-items: end; margin-bottom: 24px; }
+    h1 { margin: 0; font-size: clamp(2rem, 6vw, 4rem); letter-spacing: -.06em; }
+    h1 span, .eyebrow { color: #9da8ff; }
+    p { color: #aab2cc; line-height: 1.55; }
+    .badge { padding: 8px 12px; border: 1px solid #39447c; border-radius: 999px; color: #cbd2ff; white-space: nowrap; }
+    .grid { display: grid; grid-template-columns: minmax(0, 1.1fr) minmax(320px, .9fr); gap: 18px; }
+    .card { background: rgba(17, 22, 42, .92); border: 1px solid #293152; border-radius: 20px; padding: 22px; box-shadow: 0 18px 70px #0007; }
+    .card h2 { margin: 0 0 18px; font-size: 1rem; letter-spacing: .08em; text-transform: uppercase; color: #cbd2ff; }
+    label { display: block; margin: 14px 0 7px; font-size: .78rem; font-weight: 750; color: #b8c0da; }
+    input, textarea, button { width: 100%; border-radius: 11px; border: 1px solid #364064; font: inherit; }
+    input, textarea { padding: 12px 13px; color: #fff; background: #0c1122; outline: none; }
+    input:focus, textarea:focus { border-color: #8290ff; box-shadow: 0 0 0 3px #8290ff22; }
+    textarea { min-height: 180px; resize: vertical; }
+    input[type=file] { padding: 9px; }
+    .actions { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-top: 18px; }
+    button { padding: 12px; cursor: pointer; font-weight: 800; color: #fff; background: #6978f4; border-color: #8490ff; }
+    button.secondary { background: #171e36; border-color: #364064; }
+    button:disabled { cursor: wait; opacity: .55; }
+    .status { min-height: 24px; margin: 14px 0 0; font-size: .88rem; color: #aab2cc; }
+    .status.ok { color: #69e0ad; }
+    .status.error { color: #ff8c9b; }
+    pre { min-height: 430px; max-height: 680px; overflow: auto; margin: 0; padding: 15px; border-radius: 12px; background: #070a12; border: 1px solid #252c48; color: #cad2ff; font: 12px/1.55 ui-monospace, SFMono-Regular, Consolas, monospace; white-space: pre-wrap; word-break: break-word; }
+    .hint { font-size: .78rem; margin: 7px 0 0; }
+    @media (max-width: 780px) { header { align-items: start; flex-direction: column; } .grid { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <main>
+    <header>
+      <div>
+        <div class="eyebrow">DEV 2 · INGESTION TEST HARNESS</div>
+        <h1>Memora<span>.</span></h1>
+        <p>Temporary browser client for testing Jac walkers before the production mobile UI lands.</p>
+      </div>
+      <div class="badge">Disposable UI · No dependencies</div>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <h2>Lecture input</h2>
+
+        <label for="apiBase">Jac API base URL</label>
+        <input id="apiBase" placeholder="Same origin, or https://your-jachammer-app" />
+        <p class="hint">Leave blank when this page and the Jac API share an origin.</p>
+
+        <label for="subject">Subject</label>
+        <input id="subject" value="Computer Networks" />
+
+        <label for="title">Lecture title</label>
+        <input id="title" value="TCP Flow Control" />
+
+        <label for="notes">Notes or transcript</label>
+        <textarea id="notes">TCP establishes a connection using SYN, SYN-ACK, and ACK. The receiver advertises a receive window. The sender limits unacknowledged data to avoid overwhelming the receiver.</textarea>
+
+        <label for="image">Optional slide or handwritten-note image</label>
+        <input id="image" type="file" accept="image/png,image/jpeg,image/webp" />
+        <p class="hint" id="imageHint">No image selected. The text extractor will be used.</p>
+
+        <div class="actions">
+          <button id="ingest">Ingest lecture</button>
+          <button id="clear" class="secondary">Clear result</button>
+          <button id="dashboard" class="secondary">Get dashboard</button>
+          <button id="graph" class="secondary">Get graph data</button>
+        </div>
+        <div id="status" class="status" role="status" aria-live="polite">Ready.</div>
+      </section>
+
+      <section class="card">
+        <h2>Walker response</h2>
+        <pre id="result">Submit a lecture or probe an endpoint to see its JSON response.</pre>
+      </section>
+    </div>
+  </main>
+
+  <script>
+    const $ = (id) => document.getElementById(id);
+    const controls = ['ingest', 'dashboard', 'graph'].map($);
+
+    function endpoint(walker) {
+      return `${$('apiBase').value.trim().replace(/\/$/, '')}/walker/${walker}`;
+    }
+
+    function setStatus(message, kind = '') {
+      $('status').textContent = message;
+      $('status').className = `status ${kind}`;
+    }
+
+    function setBusy(busy) {
+      controls.forEach((button) => { button.disabled = busy; });
+    }
+
+    function fileAsBase64(file) {
+      return new Promise((resolve, reject) => {
+        const reader = new FileReader();
+        reader.onerror = () => reject(new Error('Could not read the selected image.'));
+        reader.onload = () => resolve(String(reader.result).split(',', 2)[1]);
+        reader.readAsDataURL(file);
+      });
+    }
+
+    async function callWalker(walker, payload) {
+      setBusy(true);
+      setStatus(`Calling ${walker}…`);
+      const started = performance.now();
+      try {
+        const response = await fetch(endpoint(walker), {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload),
+        });
+        const text = await response.text();
+        let data;
+        try { data = JSON.parse(text); } catch { data = { raw_response: text }; }
+        $('result').textContent = JSON.stringify({ http_status: response.status, ...data }, null, 2);
+        if (!response.ok) throw new Error(data.detail || data.error || `HTTP ${response.status}`);
+        setStatus(`Success in ${Math.round(performance.now() - started)} ms.`, 'ok');
+      } catch (error) {
+        setStatus(`${error.message}. Check the API URL, server logs, key, and CORS policy.`, 'error');
+      } finally {
+        setBusy(false);
+      }
+    }
+
+    $('image').addEventListener('change', () => {
+      const file = $('image').files[0];
+      $('imageHint').textContent = file
+        ? `${file.name} · ${(file.size / 1024).toFixed(1)} KB · multimodal extractor`
+        : 'No image selected. The text extractor will be used.';
+    });
+
+    $('ingest').addEventListener('click', async () => {
+      const payload = {
+        subject_name: $('subject').value.trim(),
+        lecture_title: $('title').value.trim(),
+        notes_text: $('notes').value.trim(),
+      };
+      const file = $('image').files[0];
+      if (!payload.lecture_title) return setStatus('Lecture title is required.', 'error');
+      if (!payload.notes_text && !file) return setStatus('Add notes or choose an image.', 'error');
+      if (file) payload.image_b64 = await fileAsBase64(file);
+      await callWalker('ingest_lecture', payload);
+    });
+
+    $('dashboard').addEventListener('click', () => callWalker('get_dashboard', {
+      subject_name: $('subject').value.trim(),
+    }));
+
+    $('graph').addEventListener('click', () => callWalker('get_graph_data', {
+      subject_name: $('subject').value.trim(),
+    }));
+
+    $('clear').addEventListener('click', () => {
+      $('result').textContent = 'Result cleared.';
+      setStatus('Ready.');
+    });
+  </script>
+</body>
+</html>
