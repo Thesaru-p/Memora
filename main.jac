@@ -15,6 +15,14 @@ import from backend.agents.quiz_generator { generate_micro_quiz_items, Generated
 import from backend.agents.evaluator { evaluate_quiz_submission, StudentAnswerSubmission }
 import from backend.agents.scheduler { get_notifications }
 import from backend.agents.analytics { get_analytics }
+import from .components.MemoraDashboard { MemoraDashboard }
+
+import ".styles.global.css";
+import from "@jac/runtime" { Router, Routes, Route }
+
+def:pub app() -> JsxElement {
+    return <Router><Routes><Route path="/" element={<MemoraDashboard />} /></Routes></Router>;
+}
 
 # -------------------------------------------------------------
 # 1. Ingest Lecture Notes (Dev 2 Pipeline)
@@ -25,7 +33,7 @@ walker:pub ingest_lecture {
     has notes_text: str = "";
     has image_b64: str = "";
 
-    can process with `root entry {
+    can process with `Root entry {
         # Agent 1: Analyze lecture notes (text or image) and extract atomic concepts
         extracted = extract_concepts_from_text(self.lecture_title, self.notes_text, self.image_b64);
 
@@ -65,7 +73,7 @@ walker:pub ingest_lecture {
 walker:pub get_dashboard {
     has subject_name: str = "Computer Networks";
 
-    can fetch with `root entry {
+    can fetch with `Root entry {
         now: float = time.time();
 
         report {
@@ -88,7 +96,7 @@ walker:pub get_dashboard {
 walker:pub get_quiz {
     has subject_name: str = "Computer Networks";
 
-    can prepare_quiz with `root entry {
+    can prepare_quiz with `Root entry {
         now: float = time.time();
         quiz_id: str = f"quiz_{int(now)}";
 
@@ -141,7 +149,7 @@ walker:pub submit_quiz {
     has quiz_id: str;
     has submissions: list[dict] = [];
 
-    can evaluate with `root entry {
+    can evaluate with `Root entry {
         typed_subs: list[StudentAnswerSubmission] = [];
         for item in self.submissions {
             typed_subs.append(StudentAnswerSubmission(
@@ -166,7 +174,7 @@ walker:pub submit_quiz {
 walker:pub get_graph_data {
     has subject_name: str = "Computer Networks";
 
-    can gather with `root entry {
+    can gather with `Root entry {
         nodes: list[dict] = [
             {
                 "id": "c_ip_addressing_and_subnetting",
